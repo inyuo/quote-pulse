@@ -38,9 +38,10 @@ yarn check:manifest # 校验 package.json 的 contributes 与 src 注册一致
 yarn package       # 打包 VSIX
 ```
 
-改动 webview 页面（`template-packages/leek-center`）后，需要重新构建模板，否则打包产物仍是旧页面：
+改动 webview 页面（`template-packages/leek-center`）后需要重新构建模板，否则打包产物仍是旧页面。**全新 clone 时该构建产物目录为空**（被 `template-packages/leek-center/.gitignore` 忽略，不入仓库），不构建则「行情中心」会提示「请检查模板文件是否存在」：
 
 ```bash
+yarn --cwd ./template-packages/leek-center install
 yarn --cwd ./template-packages/leek-center run build
 ```
 
