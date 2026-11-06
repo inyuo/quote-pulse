@@ -1,0 +1,31 @@
+.vscode/**
+.vscode-test/**
+out/test/**
+src/**
+template-packages/**
+demo/**
+screenshot/
+.gitignore
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
+**/*.map
+**/*.ts
+screenshot/**
+index.md
+document.md
+development.md
+CODE_OF_CONDUCT.md
+CNAME
+# 以下为打包泄漏项（本地笔记 / CI 配置 / 开发期文件）
+.codebuddy/**
+.github/**
+ai.md
+yarn.lock
+package-lock.json
+commitlint.config.js
+PLAN.md
+test/**
+scripts/**
+docs/**
+# node_modules

@@ -1,0 +1,415 @@
+# 资金动态模块 · 实施进度
+
+> 方案：**后端数据层 + postMessage**（方案二）+ **canvas 自绘图表**
+> 数据源：xxjwxc 为主，东财/新浪为备（`fflow` 实测被反爬拦截，仅 `clist` 可用）
+> 分支 `dev` · 起始基线 `39a1437`
+
+## 范围（最终版，一次性交付）
+
+四个粒度全部落地：
+
+| 粒度 | 数据 | 来源 |
+|---|---|---|
+| A 每只自选股当日主力净流入 | 逐股列表 | xxjwxc `analy.get_share_main` |
+| B 单股分时资金曲线 | price[] + main[] | xxjwxc `analy.get_share_main`（canvas 双轴） |
+| C 自选股所属板块资金流 | 板块排名 | xxjwxc `shares.search` → `get_hy_time` |
+| D 全行业资金流排名 | 496 板块 | 东财 `clist/get` ←→ xxjwxc `get_hy_time` 互备 |
+
+三处消费：
+
+1. **P1** 数据层 + 接入「AI分析股票」prompt 附录
+2. **P2** 资讯视图第二数据源兜底（韭研超时/空时）
+3. **P3** 新开「资金动态」窗口（四粒度 + canvas 曲线）
+
+## 进度
+
+- [x] 0. 接口结构验证（`get_hy_time` 有金额 `data:[name,jlr,tm]`；东财 `clist` 稳定、`fflow` 风控后已恢复）
+- [x] 1. 数据层 `src/shared/xxjwxcData.ts` + 单测（先红后绿）
+- [x] 2. 数据层 `src/shared/emMoneyFlow.ts` + 单测（30 passing，新增 30 用例）
+- [x] 3. 接入 AI prompt 附录（`ai-service.ts` + `stock-news-view.ts` 两处，
+      串行取数改 `Promise.all` 并发，三组数据各自 `.catch` 降级）
+- [x] 4. 资讯第二源兜底（`newsService.ts` + 新增 `headlineNews.ts` 头条转换器）
+- [x] 4b. 并发限流 `mapLimit`（`shared/utils.ts`，防打爆第三方）
+- [x] 4c. 多源编排层 `src/shared/fundFlowData.ts`（A 逐股 / D 行业 / B+C 详情）
+- [x] 5. 开窗 `src/webview/stockFundFlow.ts` + `template/stock-fund-flow.html`
+      （四区 + canvas 双轴图，零外部依赖）
+- [x] 6. 命令注册 2 条：`leek-fund.viewStockFundFlow`（命令面板）、
+      `leek-fund.stockFundFlowForStock`（自选股右键，`group3`），
+      通过 `check-manifest` 一致性测试
+- [x] 4d. A 粒度备源接入：`xxjwxc 失败 → 东财 fflow 当日值`；
+      删除未接入的新浪逐日源（语义为逐日粒度，与分时的 B 不匹配，
+      作第三层降级的收益低于维护成本）
+- [x] 7. 全量验证 `tsc` 0 error / `eslint` 0 error（5 warning 基线）/
+      **83 passing**（新增 49，删 4 个新浪用例）/ 模板 script 语法检查
+- [x] 7b. 端到端真实接口验证（不 mock）：
+      A 3行过滤正确 · B 242 时点 · C 3 板块 · 分析结论完整 ·
+      **数据一致性**（列表末值 == 详情末值 297097790）· 非 A 股空详情不发请求
+- [x] 7c. 东财限流态验证：`toSecid` 全对、被限流时返回 null/空数组**不抛错**、
+      重试 1 次生效、日志精简为单行（原 axios error 带 config/request 会刷屏）
+- [x] 8. 提交 `65842fb`（15 files / +2692，husky lint + commitlint 通过）+
+      重新打包 `investment-monitor-1.0.0.vsix`（3221 files / 6.37MB）；
+      打包后核验：6 个新文件全部进包，并修复 `.vscodeignore` 漏掉的
+      `docs/**`（进度文件首次打包时被带入，已排除并复验零泄漏）
+
+## 设计约束（沿用既有教训）
+
+- 数据层**可单测**（方案一被否的核心原因）
+- 每块数据独立 `try/catch`，失败只让该区块显示「暂无数据」
+  （韭研超时静默吞异常 → AI 说「无法抓取」的教训）
+- 韭研/xxjwxc 统一 **30s 超时 + 重试 1 次**
+- 失败绝不挂主流程
+
+## 决策记录
+
+- **不加 `leek-fund.xxjwxc.enabled` 配置开关**：YAGNI。降级链路已保证接口挂掉时
+  区块显示「暂无数据」而非报错，开关只省几次失败请求噪音，不值得膨胀
+  `package.json` 配置（已有 43 命令）。
+- **不引入 echarts**：`price[]`/`main[]` 双数组画双轴约 60 行 canvas，
+  不值得为它给 6.35MB 的包再加 800KB。
+- **东财 API 有按 IP 的频率限制**（实测）：短时间内密集请求会把
+  `/api/qt/clist/get` 和 `/fflow/kline/get` 拦成 `ECONNRESET`/`Empty reply`，
+  而同期 `quote.eastmoney.com` 网页始终 200、`push2` 根路径 404（服务本身活着）。
+  推论：正常插件使用频率远低于触发阈值，但仍需重试 + 限流 + 降级三重防护。
+  `fetchEastIndustryFlow` 加重试 1 次即为此。
+- **xxjwxc `get_hy_time` 只返回 12 个行业**（50 个时间点），不是全量 496。
+  因此 D 粒度降级时只有「主要行业 12 个」——前端按 `IndustryRow.code` 是否存在
+  标注数据源（东财有 BK 代码 → 全量；xxjwxc 无代码 → 备用源），不让用户误以为是全部。
+- **A 粒度备源选东财 fflow、弃新浪逐日**：东财返回「当日主力净流入」单值，
+  与 xxjwxc 分时序列末值语义一致；新浪是逐日粒度（字符串金额需转换、还要判断
+  `opendate` 是否当天），作第三层降级的收益低于维护成本。备源只在主源失败时触发，
+  此时粒度 B（分时曲线）同样是空的，所以不会出现「列表一个值、点进去另一个值」
+  的跨源矛盾。
+
+## 后续追加
+
+- [x] **打包版本号带日期时间**（用户要求「每次打包产生变化」）：
+  新增 `scripts/package.js` 编排打包，版本生成 `1.0.YYYYMMDDHHmmss`
+  （例 `1.0.20261019170500`）——保持 1.0 主线前缀、时间戳单调递增以满足
+  VS Code「新版本必须大于旧版本」的更新要求、patch 无前导零故 semver 合法。
+  打包前临时写入 `package.json`，无论成败都用**原始字节还原**，
+  版本只体现在产物上，git 工作区保持干净。`package` 脚本改为
+  `node ./scripts/package.js`，原有 check-deps / check-manifest 前置检查保留。
+  新增 `test/package-version.test.js` 7 用例（格式/补零/同秒稳定/跨秒必变/
+  递增链/跨小时位数/semver），全量 **90 passing**。
+  产物 `investment-monitor-1.0.20261019170500.vsix`（3221 files / 6.37MB），
+  包内 `extension/package.json` 的 version 已确认为带日期的值。
+
+## 窗口显示优化（2026-10-26，用户提出的两项）
+
+- [x] **1. 左侧自选股显示股票名称**
+  根因：`StockFundRow` 只有 `code/mainNet/tm/source`，后端从未取过名称，
+  前端只能渲染代码 `sh600519`。
+  方案（实测对比后选定）：**腾讯批量行情** `qt.gtimg.cn/q=sh600519,sz000001,...`
+  一次请求拿全部名称（30 只约 15KB，GBK 编码，复用 `iconv-lite` 解码模式）；
+  否决的备选「复用自选股树行情缓存」——0 请求但依赖树已加载，刚启动时拿不到，
+  且让 webview 层依赖 explorer 层。
+  实测细节：`r_` 精简前缀对 A 股返回 `pv_none_match`（不可用），
+  必须用原始代码前缀；无效代码行无名称段，`parseStockNames` 不入表。
+  实现：`tencentStock.ts` 新增 `parseStockNames`（纯函数，可单测）+
+  `fetchStockNames`（失败返回 `{}` 不抛错）；`loadStockFundRows` 里
+  名称与逐股资金流**并发**，名称失败只丢展示名、行与资金流照常返回。
+  渲染：名称为主（加粗）+ 代码为辅（弱色小字），名称缺失回退只显示代码。
+- [x] **2. 第三方量化分析区显示优化**
+  根因：接口原始数据本是结构化分组（实测茅台 5 组：PEG估值/技术指标分析/
+  预测与评价/综合评分/特色数据），但 `fetchStockAnalysis` 拍平成
+  `【组名】msg1；msg2` 纯文本整块 `pre-wrap` 渲染，无层次。
+  实现：新增 `fetchStockAnalysisGroups` 返回 `{name, msgs[]}[]` 结构化分组；
+  `fetchStockAnalysis` 改为其文本投影（**AI prompt 两个消费方零改动**，
+  附录格式与原来完全一致）；`StockDetail.analysis` 类型从 `string` 改为
+  `AnalysisGroup[]`。
+  渲染：分组卡片 = 组名徽章（badge 色）+ 组内逐条消息，
+  消息里首个冒号（中英文皆可）前的 key 用弱色区分层次。
+- [x] **3. 模板行为测试基座**：新增 `test/helpers/webview-dom.js`（伪 DOM，
+  在 Node vm 里执行模板内联 script，不引 jsdom）+ `test/stockFundFlowView.test.js`
+  4 用例（名称渲染/名称缺失回退/分组卡片/空态）。
+- [x] TDD：先红后绿，RED **14 failing**（结构化分组 3 + 腾讯名称 4 +
+  编排层 4 + 模板渲染 3）→ GREEN 全绿。
+  验证：`tsc` 0 error / `eslint` 0 error 5 warning（基线）/
+  **103 passing**（原 90 + 新增 13）。
+- [x] 端到端真实接口验证（不 mock）：腾讯名称 4 只全对、
+  列表 3 只 A 股带名称（hk00700 正确过滤）、分析 5 分组结构化、
+  `fetchStockAnalysis` 文本首行与原来一致、详情 `analysis=array/5`、
+  名称接口失败降级 `name:""` 且资金流数据不受影响。
+
+## 量价掘金集成（2026-11-04）
+
+> 需求：侧边栏「量价掘金」树视图（登录态/暗盘榜单）+ 双面板
+> （量价分层/北向资金流面板 + 大盘指数 spark 面板）+ 微信扫码登录。
+> 数据源：xxjwxc（`weixin.login` SSE / `get_dark_buy` / `get_share_cjl` / `weixin.re_login`）
+> + 东财 `kamt.rtmin`（北向）+ 腾讯 `hs/index`（大盘），零新依赖（复用 axios）。
+> 分支 `dev` · 提交范围 `78fa4a8..6891e2f`（8 个功能提交，Task 1~7）
+
+### 功能摘要
+
+- **登录**：微信扫码 + SSE 长连接自动截获登录态，会话落库（`globalState`），
+  失效（1018 / `relogin:true`）自动清除回未登录态；网络失败保守保留会话。
+- **树视图**：`leekFundView.quant` 分区 —— 登录引导节点 / 暗盘榜单（30min TTL 缓存）/
+  双面板入口；未登录时只显示登录引导 + 面板入口。
+- **双面板**：量价分层（`get_share_cjl` 成交量分时 canvas 自绘）+
+  北向资金流（东财沪/深股通分时）；大盘指数 spark（腾讯分时 + 涨跌幅）；
+  未登录打开 cjl 面板显示登录引导（`cjlUnlogged` 契约）。
+
+### 架构
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 数据层 | `src/shared/ljgxData.ts` | SSE 解析（纯函数 `extractSseEvents`）、会话存取（`load/save/clear/checkSession`）、登录监听 `startLoginWatch`、授权接口 `fetchDarkBuy`/`fetchShareCjl`（1018 降级）、免登录接口 `fetchNorthFundTrends`/`fetchIndexSpark` |
+| 登录 UI | `src/webview/quantLogin.ts` + `template/quant-login.html` | 二维码自绘 canvas + SSE 自动截获登录态 |
+| 图表面板 | `src/webview/quantPanel.ts` + `template/quant.html` | cjl/北向/index 三个 tab，canvas 自绘零依赖 |
+| 树视图 | `src/explorer/quantProvider.ts` | 登录态 + 榜单 + 面板入口，`registerQuant` 供面板登录成功后 refresh |
+
+### 登录流程（3 行）
+
+1. 设备号 `getDeviceId` 固化 `did` → SSE 连接 `weixin.login?did=...` 等待扫码帧。
+2. 用户扫码后服务器推 `status:1 + sessionId` 帧 → `saveSession` 落库，断开监听，刷新树/面板。
+3. 启动静默校验 `weixin.re_login`（`checkSession`）：`relogin:true` → 清库；网络失败 → 保留会话。
+
+### 实测记录（Task 8 真机 e2e，node 直连编译产物，不 mock）
+
+| 用例 | 结果 |
+|---|---|
+| `checkSession(store{sessionId:"123"})` | 服务器 `relogin:true` → 返回 `null` 且 store 已清 ✓ |
+| `fetchDarkBuy()` 无会话 | 返回 `null` 不抛错（不发请求）✓ |
+| `weixin.login?did=VSCODE_…`（已登录 did） | 200 / `event:msg` 首帧 `status:1` + sessionId ✓ |
+| `fetchDarkBuy(真实会话)` | title `2026-11-03`、100 条榜单；前 3：宁德时代 5.95亿/12.85亿、阳光电源 5.54亿/5.41亿、银之杰 3.62亿/-2030.38万 |
+| `fetchShareCjl(["sh000001"])` | tm `2026-11-03`、price 121 点（6028981582.5 → 426411760642）✓ |
+| `fetchNorthFundTrends()` | `times` 121 点（9:30→11:30，当日仅上午数据）；`hgtNet`/`szgtNet` 全 0（北向当日无发布，数据源时段所致，如实记录不算失败） |
+| `fetchIndexSpark()` | 1 条（sh000001，price 121 点，percent ≈ -0.10%）；腾讯 `scenes=6` 响应仅含上证一分时，非解析丢数据 |
+
+### SSE 真机补验（Task 2 遗留 cannot-verify 项）
+
+- 裸 http 流式读 3 秒：`content-type: text/event-stream`，已登录态 **75ms** 内收到
+  首帧 `event:msg`，服务器推 `status:1` 帧后主动关闭流（`stream end` 正常触发）。
+- 首帧 JSON keys 顺序：`code, url, status, userId, userName, avatarUrl, rg, vip, sessionId`
+  —— **不含 `overdueTime`**（Task 6 疑虑消解：SSE 首帧无该字段，会话 overdueTime 由
+  `checkSession` 的 `re_login` 响应补全）。
+
+### TDD 基线
+
+- 起始 **103 passing** → 最终 **155 passing**（+52：数据层/监听器/树视图/登录/面板逐任务递增 118→123→130→134→143→147→155）。
+- `yarn compile`（tsc）0 error；`npx eslint src --ext ts` 0 error / 5 warning（既有基线，无新增）。
+
+## 追加：策略选股（2026-11-04）
+
+用户确认的展示形态：**并入 `template/quant.html` 作为第 4 个 tab**，不新增面板、命令与 view 贡献点。
+
+### 官网契约（前端 chunk 解析 + 无 token 直连实测）
+
+- 9 类策略（`lq=cd/qs/dwfl/szx/ztb/cx/hy/jzc/fk`）**共用一个接口**：
+  `POST /shares/get_lq {tag, days}`；无 token 实测返回 `{state:false, code:1018, error:"缓存已过期，请刷新重试"}`，
+  即必须登录，可直接复用 `ljgxPostAuth` 的 1018 清会话降级层。
+- 响应 `data = {list, hyTags, tsTags}`，`list` 为两级分组（每组内含 `list`，行带 `code`）；
+  `tsTags` 为 `{doc,url}` 标签条，`hyTags` 官网返回但未渲染。
+- `days` 为官网 `titleUtils.dayChoice` 的 8 档：近 1/3/5/10/20/30/60/100 天。
+- 官网 `lqMap` 还有另外 9 类（主力监控、武松打板等），本轮未接，`LQ_TAGS` 留扩展位。
+
+### 落点
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 数据层 | `src/shared/lqData.ts`（新增） | `LQ_TAGS`/`LQ_DAYS` 元数据、`fetchLqList`、`normalizeLqGroups` 防御式归一（行字段待登录后真机钉死） |
+| 复用 | `src/shared/ljgxData.ts` | 导出 `ljgxPostAuth`，不重复实现鉴权 POST |
+| 模板 | `template/quant.html` | 第 4 tab DOM 表格、9 chips + 8 档天数、分组折叠行、未登录/加载/失败占位；渲染分发改显式分支；补 `resize` 监听 |
+| 宿主 | `src/webview/quantPanel.ts` | lq 懒加载、按 `tag+days` 的 30min 缓存与在途合并、`selectLqTag`/`selectLqDays`/`openStock` 消息、`quantPanel(...,tag)` |
+| 树/命令 | `src/explorer/quantProvider.ts`、`src/registerCommand.ts` | 已登录新增「策略选股」面板入口；`leek-fund.quantOpen` 放行 `lq` 并透传 `tag` |
+
+`lq` 行「资金动态」复用 `leek-fund.stockFundFlowForStock {id: code}`；`tsTags` 只展示文本、不跳外链。
+
+### 验证与待办
+
+- 新增 21 条用例（数据层 9 / 模板 5 / 宿主 5 / 树视图 2），并修掉上一批遗留的
+  `resize 触发当前 Tab 重画` 红灯。
+- `npx tsc -p ./` 0 error；`npx eslint src --ext ts` 0 error / 5 warning（既有基线）；
+  排除外部网络用例后全量 **188 passing / 0 failing**。
+- `yarn test:unit` 全量仍有 1 个失败：`test/aiStockData.test.js` 的搜狐 JSONP 用例
+  返回 HTTP 503（单独跑该文件同样 503），属第三方接口不可用，与本轮改动无关。
+- **待办**：登录后真机逐 tag 核对分组标题与行字段（当前归一化为防御式解析）；
+  登录成功后面板仍需手动点刷新（与现有 cjl 一致）。
+
+## 追加：资讯按来源分组（2026-11-04，方案 A）
+
+用户确认的展示形态：侧边栏 `leekFundView.news` 从扁平混排改为**两级树**（4 个来源分组 + 组内条目），不新增 webview/命令/view 贡献点。
+
+### 官网契约（pages/news/news 的 segmentedList + 子页 chunk 解析）
+
+| 分段（官网 / 用户叫法） | 子页 | 接口与请求体 |
+|---|---|---|
+| 热点异动 `rdyd` / 热点快讯 | `pages/article/jdkp` | `POST /shares.get_glh_tm {start:'',end:''}` |
+| 今日快讯 `mrkx` | `pages/article/hejjw` | `POST /shares.get_hejjw {dayStr:''}` |
+| 全球新闻 `rdkp` | `pages/article/xzw` | `POST /shares.get_xzw {start:'',end:'',tag:''}` |
+| 投资日历 `tzrl` | `pages/article/tzrl` | `POST /shares.get_xzw {start:'',end:'',tag:'1'}`（同接口靠 tag 分流） |
+
+原 `xxjwxcNews.ts` 只接了 `get_hejjw`/`get_xzw` 且一律传 `{}`，投资日历那一类根本没取；四来源均需登录（`user-token`，1018 降级）。行字段以登录后真机为准，归一化层做防御式解析。
+
+### 落点
+
+- `src/explorer/xxjwxcNews.ts`：`NEWS_SOURCES` 元数据（endpoint/body/pageUrl/ttlMs）、`resolveNewsSourceUrl`、带 body 的 `xxjNewsPost`、`fetchXxjSource`（失败返回 `null`、未登录/无数据返回 `[]`）、`buildXxjSourceGroups`。
+- `src/explorer/jygNews.ts`：`JYGNewsItem` 增加可选 `source`。
+- `src/explorer/newsService.ts`：`getNewsGroups` 四源并发 + 按来源分级 TTL（快讯 30s / 新闻·日历 5min）、失败源单独标记、`NewsSourceGroupTreeItem`；旧 `getNewsList` 三层降级链路保留给未登录。
+- `src/explorer/newsProvider.ts`：两级 `getChildren`，失败/空分组给可点击重试的占位节点。
+- `src/registerCommand.ts`：`newItemClick` 按 `source` 打开对应官网子页。
+- `src/extension.ts`：可见时 30s 轮询由 `refresh(true)` 改为 `refresh(false)`，避免绕过分级 TTL 每 30s 全量打 4 个接口；手动「刷新资讯」仍强制全量。
+
+### 验证与待办
+
+- 新增 `test/newsSources.test.js` 17 条（元数据/请求体/降级/分组归一/分级缓存/两级树/URL 分流）；
+  `npx tsc -p ./` 0 error、`eslint` 0 error / 5 warning（既有基线）、排除外部网络 503 用例后全量 **205 passing**。
+- **待办**：登录后真机核对四来源返回的分组标题、行字段与 `tag` 取值；单来源精确重试目前复用全量
+  `leek-fund.refreshFollow`（未做按 key 的单独刷新命令）。
+
+## 追加：掘金树精简 + 量价分层修复（2026-11-04）
+
+### 树精简（用户确认：单入口默认 north）
+
+- 移除侧边栏「掘金」里的明盘/暗盘资金榜（原 `POST /shares.get_dark_buy {days:2,tag:'all'}`，
+  100 行 `darkRow`）与 4 个重复的 tab 入口；树现在只有
+  `[微信扫码登录 或 用户名, 打开量化面板]`。面板内 4 个 tab 全部保留，进去后自行切换。
+- `src/explorer/quantProvider.ts`：删除 `darkSpecs` / `darkRowSpec` / `DARK_TTL_MS` /
+  `isSameDay` / `doFetchDarkBuy` 与榜单缓存字段；`QuantState` 只剩 `session/sessionValid`；
+  `refreshData()` 语义改为「重新校验会话 + 重绘」（`leek-fund.refreshQuant` 命令与
+  `package.json` 贡献点不变）。数据层 `fetchDarkBuy` 保留但不再有调用方。
+- `test/quantTree.test.js` 重写为 10 条（节点编排 5 + Provider 会话 TTL 5）。
+
+### 量价分层恒定「数据加载失败」的根因与修复
+
+- 根因：`src/webview/quantPanel.ts` 的 cjl 分支调用 `fetchShareCjl(cjlCodes())` **漏传 `deps`**；
+  `ljgxPostAuth` 在拿不到 `store` 时直接 `return null`（不发请求、不打日志），
+  模板收到 `cjl: null` 且 `cjlUnlogged: false` 就渲染失败占位，点重试走同一路径故永远无效。
+  最小复现：不传 deps → `null`；传 `{store}` → 返回真实 `{tm, price[]}`。
+  这是既有 bug（`HEAD` 版本同样），之前真机 e2e 是 node 直连数据层并显式传 store，没走宿主 UI。
+- 修复：改为 `fetchShareCjl(cjlCodes(), { store: panelStore || undefined })`；
+  `test/helpers/stubLjgxViewData.js` 记录 deps，`test/quantPanelView.test.js` 新增 1 条断言
+  「已登录 cjl → fetchShareCjl 收到 {store}」的回归用例。
+- 其余授权接口（`fetchLqList`、provider 原 `fetchDarkBuy`）本来就传了 store，不受影响。
+
+### 验证
+
+`npx tsc -p ./` 0 error；`npx eslint src --ext ts` 0 error / 5 warning（既有基线）；
+排除外部搜狐 503 用例后全量单测 **204 passing / 0 failing**。
+
+## 追加：资金动态页面替换为官网个股三块（2026-11-05）
+
+### 官网契约（用户截图确认）
+
+- `#/pages/add/add?scode=sz000977&tag=daily` 的「资金动态」tab = `StockInfoFund` 组件，
+  服务端下发的表格区为三块：**主力分析 / 主力资金 / 明-暗盘**。
+- 三块共用 `POST /analy.get_sp {code}`（`GetSp1` → `GetReturn`），返回 `data.list`：
+  每项 `{title, d1..d4（4 列表头）, list:[{d1..d4, color}]}`。截图表头依次为
+  `分析日/主力成本(占比)/排名/得分`、`日期/净流入/累积/资金评分`、
+  `日期/暗盘/明盘/净流入`；行颜色由服务端 `color` 给出（红涨绿跌）。
+- 该接口**需 user-token**：未登录实测 `{"state":false,"code":1018,"error":"缓存已过期，请刷新重试"}`。
+  注意这里的「明/暗盘」是个股历史日频表格，**不是**量价掘金页的
+  `POST /shares.get_dark_buy`「暗/明盘资金榜」（全市场榜单），两者不要混用。
+- 页面另有 `analy.get_share_main`（主力净流入图）、`analy.get_share_cjl`（成交额对比）、
+  `shares.get_hk_market_kline`（港股多空博弈），按用户确认的范围**不接入**。
+- **登录态实测（IDE 已登录）**：用 `globalState` 里的 `leek-fund.ljgxSession` 带
+  `user-token` 请求 `sz000977`，`state:true`，`data.list` 有 **13 块** —— 前三块正是
+  主力分析 / 主力资金 / 明/暗盘，后面还有违规记录、分红配送、业绩预告、增减持、
+  高管增减持、计划回购、大宗交易、近期龙虎榜、近期游资榜、名人分析。
+  每块字段为 `{title,d1..d4,isDot,list:[{d1..d4,color}]}`，行色为
+  `#ff0000` / `#1AAD19` / `#000000`。因此 `normalizeFundTables` **必须按标题白名单
+  过滤并按固定顺序输出三块**，否则左栏会渲染 13 张表。
+
+### 落点
+
+- 位置：替换 `template/stock-fund-flow.html` 左栏「自选股 · 当日主力净流入」。
+  三块**跟随当前选中个股**（走 `detail` 通道），**未登录整块不显示**（不放占位/引导）。
+  顶栏新增紧凑股票下拉，保留面板内切换个股的能力。
+- `src/shared/stockFundTables.ts`（新增）：`fetchStockFundTables(code, deps)` 复用
+  `ljgxPostAuth('analy.get_sp', {code}, deps)`；`normalizeFundTables` 防御式归一，
+  过滤无标题/无行脏块、最多 20 行、color 白名单防注入。未登录/1018/失败一律 `[]`。
+- `src/shared/fundFlowData.ts`：`StockDetail` 增 `fundTables`；`loadStockDetail(code, deps)`
+  第 4 路并发取数，单源失败只丢该字段。
+- `src/webview/stockFundFlow.ts`：`initStockFundFlow(store)` 注入登录态，
+  `pushDetail` 传 `{store}`；`src/registerCommand.ts` 两个资金动态命令入口注入
+  `createVscodeStorage(context.globalState)`。
+- 模板：删 `renderStocks`/`#stockList`/`stockCount`，新增 `renderStockSelect` 与
+  `renderFundTables`（4 列表格 + 服务端行色）；`init` 只渲染下拉，`detail` 渲染三块。
+
+### 验证
+
+`npx tsc -p ./` 0 error；`npx eslint src --ext ts` 0 error / 5 warning（既有基线）；
+排除外部搜狐 503 用例后全量单测 **218 passing / 0 failing**（新增
+`test/stockFundTables.test.js` 10 条、`test/stockFundFlowView.test.js` 6 条、
+`test/stockFundFlowHost.test.js` 2 条）。
+
+### 真机实测已核对（IDE 已登录）
+
+用 IDE `globalState` 会话实测 `analy.get_sp` 成功，字段与 bundle 推断一致；
+据此修正了「13 块全渲染」的偏差：`normalizeFundTables` 现在按标题白名单只输出
+`主力分析 / 主力资金 / 明（/ 或 \）暗盘` 三块并固定顺序，标题分隔符做了归一。
+剩余只待在插件窗口里肉眼确认左栏表格排版与行色（数据链路已验证）。
+
+## 追加：股票实时走势面板顶部工具条跳转资金动态（2026-11-05）
+
+### 入口链路
+
+Stock 视图（`leekFundView.stock`，name = `Stock`）点击个股 → `leek-fund.stockItemClick`
+→ `src/webview/stockTrend.ts` 的「股票实时走势」面板（内嵌东财 h5chart iframe）。
+该面板原先没有任何插件自己的入口，现顶部工具条加「资金动态」按钮。
+
+### 落点
+
+- `src/webview/stockTrend.ts`
+  - `canOpenFundFlow(stockCode)`：仅 `sh`/`sz` + 6 位且排除 `sh000`/`sz399`；
+    港股（`hk…`）、美股（`gb_`/`usr_…`）、指数不显示按钮
+    （资金动态三块走 `analy.get_sp`，只支持 A 股个股）。
+  - 顶部 sticky 工具条 + `#fundFlowBtn`，点击 `postMessage({command:'openFundFlow', code})`。
+  - 宿主 `webview.onDidReceiveMessage` 执行 `leek-fund.stockFundFlowForStock`，
+    参数 `{ id: stockCode }`（已是 `sh600519` 形式，无需代码归一）；该命令内部会
+    `initStockFundFlow(store)` 注入登录态，三块表格能取到数据。
+  - 面板由 `ReusedWebviewPanel` 复用，消息监听用 `webview.__leekFundFlowBound`
+    标记只注册一次，避免反复打开累积监听导致一次点击多次跳转。
+  - 按钮用中性灰底白字：页面整体带 `invert(100%)` 反色滤镜，中性色反色后仍可读。
+- `test/stockTrendPanel.test.js`（新增 4 条）+ 依赖桩
+  `stubProxyConfig` / `stubGlobalState` / `stubStockTrendPic`。
+
+### 验证
+
+`npx tsc -p ./` 0 error；eslint 0 error / 5 warning（既有基线）；
+排除外部搜狐 503 用例后全量单测 **222 passing / 0 failing**。
+
+### 打包脚本健壮性（顺带修复）
+
+- `isValidZip()`：产物不是完整 zip（打包被中断留下的半成品）时报错退出并**保留历史包**，
+  不用坏包覆盖可用包。
+- `readOriginalPackageBytes()`：检测到 `package.json` 残留上次被打断的临时版本号
+  （`1.0.<14 位时间戳>`）时，自动按 git 版本还原（只改 `version` 字段，其余字段不动），
+  避免脏版本号进仓库。
+
+## 追加：AI 分析股票数据附录增强（2026-11-05）
+
+### 需求
+
+1. 新闻附录：登录后用「资讯」栏的分类信息**替代**韭研该股新闻。
+2. 修复此前记录的局限：数据附录未接入 `analy.get_sp` 三块资金表（主力分析/主力资金/明-暗盘）。
+
+### 落点（均为可单测的纯函数 + 薄编排）
+
+- `src/explorer/xxjwxcNews.ts`：新增 `fetchXxjNewsGroupsForAi(limitPerGroup, deps)`
+  （未登录直接 `[]` 不发请求，登录复用 `fetchXxjSource`+`buildXxjSourceGroups`）与
+  纯函数 `buildXxjNewsAppendix(groups)`（仅保留有条目的分组，`【标签】\n- [时间] 标题 —— 摘要`）。
+- `src/webview/jiuyangongshe-news.ts`：把原内联的韭研新闻拼装抽为纯函数 `buildJygNewsAppendix`。
+- `src/shared/stockFundTables.ts`：新增纯函数 `buildStockFundTablesAppendix(tables)`
+  （`【标题】+表头+行`，丢弃服务端 color，脏块跳过）。
+- `src/webview/stock-news-view.ts`：`send_ai_stock_analysis(target, deps?)`
+  - 新闻任务：`hasXxjSession()` 为真 → 四来源分类附录；空/未登录 → 回退韭研该股新闻（与资讯视图同源切换）。
+  - 资金任务：并入第三路 `fetchStockFundTables(moneyCode, deps)`，文本拼在量化结论之后。
+  - `baseMessage` 改为中性表述（不再点名韭研）。
+- `src/registerCommand.ts`：`aiStockAnalysis` 命令注入 `createVscodeStorage(context.globalState)`，
+  使 `ljgxPostAuth`（需显式 store）能拿到登录态。
+
+### 关键约束
+
+- `ljgxPostAuth` 无 `deps.store` 时**直接返回 null 不发请求**（与量价分层漏传 store 同一教训），
+  所以三块表必须经命令层注入 store。
+- 资讯四来源是**全市场分类流**（非按个股过滤），与资讯侧边栏所见一致，作为盘面背景喂给模型；
+  个股专属资金/行情仍由日线、`get_share_main`、`analy_code`、`get_sp` 四路提供。
+- 三路降级：任一失败只丢对应附录，绝不挂整个分析。
+
+### 验证
+
+`npx tsc -p ./` 0 error；eslint 0 error / 5 warning（既有基线）；排除外部搜狐 503 用例后
+全量单测 **238 passing / 0 failing**（新增：资讯附录 4 + 资金表附录 2 + 韭研附录 2）。
+模块加载冒烟：`send_ai_stock_analysis`/四个新函数在 vscode-mock 下均可用，未登录附录返回空串。
+
