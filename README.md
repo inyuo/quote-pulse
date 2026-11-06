@@ -137,12 +137,10 @@
 ![](./screenshot/setting-stock.png)
 
 
-## All Thanks To Our Contributors
 
-<a href="https://github.com/LeekHub/leek-fund/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=LeekHub/leek-fund" />
-</a>
+## 致谢与授权
 
+本项目基于上游 [LeekHub/leek-fund](https://github.com/LeekHub/leek-fund) 及其贡献者的工作派生而来，遵循 **BSD-3-Clause** 协议，上游版权声明与免责声明完整保留在 [LICENSE](./LICENSE) 与源码版权头中。
 
 ## License
 
