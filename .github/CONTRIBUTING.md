@@ -45,6 +45,8 @@ yarn --cwd ./template-packages/leek-center install
 yarn --cwd ./template-packages/leek-center run build
 ```
 
+`yarn compile`（通过 `postcompile` 钩子）和 `yarn package`（通过 `vscode:prepublish`）都会自动执行上述模板构建，只有直接 F5 调试前需要手动跑一次。
+
 ## 分支策略
 
 - `main`：主分支，只接受来自 `dev` 的合并，发布版本打 `v*` tag 触发自动打包
