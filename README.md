@@ -129,15 +129,6 @@
 
 ![Blame伪装](./screenshot/blame.png)
 
-
-自定义配置在 **Settings** 视图下（Pro 用户可使用可视化个性化定制）：
-
-![](./screenshot/settings.png)
-
-![](./screenshot/setting-stock.png)
-
-
-
 ## 致谢与授权
 
 本项目基于上游 [LeekHub/leek-fund](https://github.com/LeekHub/leek-fund) 及其贡献者的工作派生而来，遵循 **BSD-3-Clause** 协议，上游版权声明与免责声明完整保留在 [LICENSE](./LICENSE) 与源码版权头中。
