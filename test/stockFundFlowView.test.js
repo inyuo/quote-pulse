@@ -189,4 +189,201 @@ describe('资金动态模板 stock-fund-flow.html', () => {
     const html = page.el('analysisBox').innerHTML;
     assert.ok(html.includes('暂无分析结论'), `空分析应显示空态，实际：${html.slice(0, 200)}`);
   });
+
+  it('顶栏「实时走势」按钮 → 带当前股票代码与名称发 openTrend', () => {
+    const page = loadTemplate('stock-fund-flow.html');
+    page.fire('message', {
+      data: initData([
+        { code: 'sh600519', name: '贵州茅台' },
+        { code: 'sz000977', name: '浪潮信息' },
+      ]),
+    });
+
+    const btn = page.el('trendBtn');
+    assert.ok(btn.listeners.click, '顶栏应绑定实时走势按钮');
+    assert.strictEqual(btn.disabled, false, 'A 股个股应可点击');
+
+    const sel = page.el('stockSelect');
+    sel.value = 'sz000977';
+    (sel.listeners.change || []).forEach((fn) => fn());
+    page.posted.length = 0;
+
+    (btn.listeners.click || []).forEach((fn) => fn());
+    const msg = page.posted.find((m) => m.command === 'openTrend');
+    assert.ok(msg, '应发送 openTrend');
+    assert.strictEqual(msg.code, 'sz000977', '应带当前选中股代码');
+    assert.strictEqual(msg.name, '浪潮信息', '应带当前选中股名称');
+  });
+
+  it('指数 / 港股不提供实时走势入口 → 按钮禁用且不发消息', () => {
+    const page = loadTemplate('stock-fund-flow.html');
+    page.fire('message', {
+      data: initData([{ code: 'sh000001', name: '上证指数' }]),
+    });
+
+    const btn = page.el('trendBtn');
+    assert.strictEqual(btn.disabled, true, '指数应禁用');
+    page.posted.length = 0;
+    (btn.listeners.click || []).forEach((fn) => fn());
+    assert.ok(!page.posted.some((m) => m.command === 'openTrend'), '禁用时不应发消息');
+
+    page.fire('message', {
+      data: initData([{ code: 'hk00700', name: '腾讯控股' }]),
+    });
+    assert.strictEqual(page.el('trendBtn').disabled, true, '港股应禁用');
+  });
+
+  describe('从策略选股 / 数据碰撞跳入（initialCode 不在自选股里）', () => {
+    function externalInit(stocks, code) {
+      const init = initData(stocks);
+      init.data.initialCode = code;
+      return { data: init };
+    }
+
+    it('外部指定股优先于自选股列表 → 选中目标股并拉详情', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire(
+        'message',
+        externalInit(
+          [
+            { code: 'sh600519', name: '贵州茅台' },
+            { code: 'sz000977', name: '浪潮信息' },
+          ],
+          'sh601127'
+        )
+      );
+
+      const selects = page.posted.filter((m) => m.command === 'select');
+      assert.strictEqual(selects.length, 1, '应只为目标股拉一次详情');
+      assert.strictEqual(selects[0].code, 'sh601127', '不能被第一只自选股覆盖');
+      assert.ok(page.el('stockSelect').innerHTML.includes('sh601127'), '下拉应包含外部指定股');
+      assert.strictEqual(page.el('stockSelect').value, 'sh601127', '下拉应选中目标股');
+      assert.strictEqual(page.el('trendBtn').disabled, false, '目标股应可跳实时走势');
+    });
+
+    it('自选股为空时，外部指定股仍能触发详情请求', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire('message', externalInit([], 'sz300750'));
+
+      assert.ok(
+        page.posted.some((m) => m.command === 'select' && m.code === 'sz300750'),
+        '不能停在「加载中…」，应为目标股发起详情请求'
+      );
+      assert.strictEqual(page.el('stockSelect').value, 'sz300750');
+    });
+
+    it('目标股详情回来后，下拉显示其名称而不是裸代码', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire('message', externalInit([{ code: 'sh600519', name: '贵州茅台' }], 'sh601127'));
+      page.fire('message', {
+        data: {
+          type: 'detail',
+          data: {
+            code: 'sh601127',
+            name: '赛力斯',
+            price: 0,
+            percent: 0,
+            mainFlow: null,
+            analysis: [],
+            sectors: [],
+            fundTables: [],
+          },
+        },
+      });
+
+      const html = page.el('stockSelect').innerHTML;
+      assert.ok(
+        html.includes('赛力斯') && html.includes('sh601127'),
+        `下拉应显示目标股名称与代码，实际：${html.slice(0, 200)}`
+      );
+      assert.strictEqual(page.el('stockSelect').value, 'sh601127', '重渲染后仍应选中目标股');
+    });
+
+    it('刷新（init 无 initialCode）后，外部指定股仍保持选中', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire('message', externalInit([{ code: 'sh600519', name: '贵州茅台' }], 'sh601127'));
+      page.posted.length = 0;
+      page.fire('message', externalInit([{ code: 'sh600519', name: '贵州茅台' }], ''));
+
+      const selects = page.posted.filter((m) => m.command === 'select');
+      assert.strictEqual(selects.length, 1, '刷新后仍应只拉一次详情');
+      assert.strictEqual(selects[0].code, 'sh601127', '刷新不能跳回第一只自选股');
+      assert.ok(page.el('stockSelect').innerHTML.includes('sh601127'), '刷新后下拉仍应保留目标股');
+    });
+  });
+
+  describe('顶栏「加入自选」', () => {
+    function addInit(stocks, watchlist, initialCode) {
+      const init = initData(stocks);
+      init.data.watchlist = watchlist;
+      init.data.initialCode = initialCode || '';
+      return { data: init };
+    }
+
+    it('当前股不在自选列表 → 按钮可用，点击发 addStock 并防重复', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire('message', addInit([], ['sh600519'], 'sh601127'));
+      page.posted.length = 0;
+
+      const btn = page.el('addStockBtn');
+      assert.strictEqual(btn.disabled, false, '未加入的股票应可添加');
+      assert.strictEqual(btn.textContent, '加入自选');
+
+      (btn.listeners.click || []).forEach((fn) => fn());
+      const msg = page.posted.find((m) => m.command === 'addStock');
+      assert.ok(msg, '应发送 addStock');
+      assert.strictEqual(msg.code, 'sh601127', '应带当前选中股代码');
+      assert.strictEqual(btn.disabled, true, '等待宿主回执期间应禁用');
+      assert.strictEqual(btn.textContent, '加入中…');
+
+      page.posted.length = 0;
+      (btn.listeners.click || []).forEach((fn) => fn());
+      assert.ok(!page.posted.some((m) => m.command === 'addStock'), '不应重复添加');
+    });
+
+    it('已在自选 → 按钮禁用并显示「已在自选」，点击不发消息', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire('message', addInit([{ code: 'sh600519', name: '贵州茅台' }], ['sh600519'], ''));
+
+      const btn = page.el('addStockBtn');
+      assert.strictEqual(btn.disabled, true);
+      assert.strictEqual(btn.textContent, '已在自选');
+
+      page.posted.length = 0;
+      (btn.listeners.click || []).forEach((fn) => fn());
+      assert.ok(!page.posted.some((m) => m.command === 'addStock'));
+    });
+
+    it('宿主回执后 watchlist 含当前股 → 按钮变「已在自选」', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire('message', addInit([], ['sh600519'], 'sh601127'));
+      (page.el('addStockBtn').listeners.click || []).forEach((fn) => fn());
+
+      page.fire('message', addInit([], ['sh600519', 'sh601127'], ''));
+      assert.strictEqual(page.el('addStockBtn').textContent, '已在自选');
+      assert.strictEqual(page.el('addStockBtn').disabled, true);
+    });
+
+    it('切换股票后按钮状态跟随当前选中股', () => {
+      const page = loadTemplate('stock-fund-flow.html');
+      page.fire(
+        'message',
+        addInit(
+          [
+            { code: 'sh600519', name: '贵州茅台' },
+            { code: 'sz000977', name: '浪潮信息' },
+          ],
+          ['sh600519'],
+          ''
+        )
+      );
+      assert.strictEqual(page.el('addStockBtn').textContent, '已在自选');
+
+      const sel = page.el('stockSelect');
+      sel.value = 'sz000977';
+      (sel.listeners.change || []).forEach((fn) => fn());
+      assert.strictEqual(page.el('addStockBtn').textContent, '加入自选');
+      assert.strictEqual(page.el('addStockBtn').disabled, false);
+    });
+  });
 });

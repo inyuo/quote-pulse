@@ -17,8 +17,6 @@ import { StockProvider } from './explorer/stockProvider';
 import StockService from './explorer/stockService';
 import globalState from './globalState';
 import { initXxjNewsStorage } from './explorer/xxjwxcNews';
-import FlashNewsDaemon from './output/flash-news/FlashNewsDaemon';
-import FlashNewsOutputServer from './output/flash-news/FlashNewsOutputServer';
 import { registerCommandPaletteEvent, registerQuant, registerViewEvent } from './registerCommand';
 import { HolidayHelper } from './shared/holidayHelper';
 import { LeekFundConfig } from './shared/leekConfig';
@@ -45,7 +43,6 @@ let forexTreeView: TreeView<any> | null = null;
 let binanceTreeView: TreeView<any> | null = null;
 let quantTreeView: TreeView<any> | null = null;
 
-let flashNewsOutputServer: FlashNewsOutputServer | null = null;
 let profitBar: ProfitStatusBar | null = null;
 
 export async function activate(context: ExtensionContext) {
@@ -66,14 +63,6 @@ export async function activate(context: ExtensionContext) {
   setGlobalVariable();
   updateAmount();
   updateStockPrice();
-
-  flashNewsOutputServer = new FlashNewsOutputServer();
-
-  // 初始化快讯服务（当前仅金十）
-  FlashNewsDaemon.registerServer({
-    print: () => {},
-    destroy: () => {}
-  } as any);
 
   const fundService = new FundService(context);
   const stockService = new StockService(context);
@@ -224,7 +213,6 @@ export async function activate(context: ExtensionContext) {
     newsProvider.refresh();
     binanceProvider.refresh();
     forexProvider.refresh();
-    flashNewsOutputServer?.reload();
     events.emit('onDidChangeConfiguration');
     profitBar?.reload();
   });
@@ -237,7 +225,6 @@ export async function activate(context: ExtensionContext) {
     nodeFundProvider,
     nodeStockProvider,
     newsProvider,
-    flashNewsOutputServer,
     binanceProvider,
     forexProvider
   );
@@ -312,7 +299,6 @@ function setGlobalVariable() {
 // this method is called when your extension is deactivated
 export function deactivate() {
   Log.info('deactivate');
-  FlashNewsDaemon.KillAllServer();
   profitBar?.destroy();
   if (loopTimer) {
     clearInterval(loopTimer);

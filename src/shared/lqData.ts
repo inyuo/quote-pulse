@@ -46,6 +46,13 @@ export const LQ_DAYS: LqDayMeta[] = [
   { num: 100, name: '近100天' },
 ];
 
+/** 「数据碰撞」可选窗口：官网 8 档去掉近1/近30，仍以 LQ_DAYS 为单一数据源 */
+export const LQ_COLLISION_DAYS: LqDayMeta[] = LQ_DAYS.filter(
+  (d) => d.num !== 1 && d.num !== 30
+);
+
+export const DEFAULT_COLLISION_DAYS = 5;
+
 /** 归一化后的个股行（字段缺失一律空值） */
 export interface LqRow {
   code: string;
@@ -205,4 +212,85 @@ export async function fetchLqList(
   return normalizeLqGroups(payload);
 }
 
-export default { LQ_TAGS, LQ_DAYS, normalizeLqGroups, fetchLqList };
+/** 碰撞输入：某策略在同一天数窗口下的榜单（null = 该策略拉取失败） */
+export interface LqCollisionItem {
+  tag: string;
+  result: LqResult | null;
+}
+
+/** 碰撞结果行：同一只股票命中了 ≥2 个不同策略 */
+export interface CollisionRow {
+  code: string;
+  name: string;
+  hits: number;
+  tags: string[];
+}
+
+export interface CollisionResult {
+  rows: CollisionRow[];
+  /** 成功返回结果的策略数；部分失败时按可用策略计算，UI 标注完整度 */
+  available: number;
+  /** 参与碰撞的策略总数 */
+  total: number;
+}
+
+/**
+ * 纯函数：把 9 类策略在同一天数窗口下的榜单按股票代码归并，
+ * 只保留命中 ≥2 个**不同策略**的股票。
+ *
+ * - code 经 toAShareCode 归一（裸 6 位与 sh/sz 前缀视为同一只）；
+ * - 同一策略跨多个分组重复出现只算 1 次；
+ * - 标签按 LQ_TAGS 顺序输出，保证 UI 稳定；
+ * - 排序：命中数降序 → 代码升序；
+ * - 脏数据（null / 非数组 / 缺 code / 未知 tag）静默跳过，不抛错。
+ */
+export function collideLqResults(items: LqCollisionItem[] | null | undefined): CollisionResult {
+  if (!Array.isArray(items)) return { rows: [], available: 0, total: 0 };
+
+  const knownTags = new Set<string>(LQ_TAGS.map((t) => t.tag));
+  const byCode = new Map<string, { code: string; name: string; tags: Set<string> }>();
+  let available = 0;
+
+  for (const item of items) {
+    if (!item || !item.result) continue;
+    available += 1;
+    if (!knownTags.has(item.tag)) continue;
+
+    const groups = Array.isArray(item.result.groups) ? item.result.groups : [];
+    for (const group of groups) {
+      if (!group || !Array.isArray(group.rows)) continue;
+      for (const row of group.rows) {
+        if (!row) continue;
+        const code = toAShareCode(row.code);
+        if (!code) continue;
+
+        let entry = byCode.get(code);
+        if (!entry) {
+          entry = { code, name: '', tags: new Set<string>() };
+          byCode.set(code, entry);
+        }
+        if (!entry.name && row.name) entry.name = row.name;
+        entry.tags.add(item.tag);
+      }
+    }
+  }
+
+  const rows: CollisionRow[] = [];
+  for (const entry of byCode.values()) {
+    const tags = LQ_TAGS.filter((t) => entry.tags.has(t.tag)).map((t) => t.label);
+    if (tags.length < 2) continue;
+    rows.push({ code: entry.code, name: entry.name, hits: tags.length, tags });
+  }
+  rows.sort((a, b) => b.hits - a.hits || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+  return { rows, available, total: items.length };
+}
+
+export default {
+  LQ_TAGS,
+  LQ_DAYS,
+  LQ_COLLISION_DAYS,
+  DEFAULT_COLLISION_DAYS,
+  normalizeLqGroups,
+  fetchLqList,
+  collideLqResults,
+};

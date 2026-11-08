@@ -22,10 +22,6 @@ const CommandHandler: Record<string, (data: any) => any> = {
     }
     delete fetchResponsePromiseMap[data.sessionId];
   },
-  postFlashNews(data) {
-    console.log('postFlashNews: ', data);
-    store.news.appendNews(data);
-  },
 };
 
 export function setupBackgroundManagement() {
