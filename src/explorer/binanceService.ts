@@ -5,12 +5,77 @@
  * @LastEditTime: 2021-01-26 23:14:24
  */
 
-import Axios from 'axios';
-import { ExtensionContext } from 'vscode';
+import Axios, { AxiosRequestConfig } from 'axios';
+import { ExtensionContext, workspace } from 'vscode';
 import { LeekTreeItem } from '../shared/leekTreeItem';
 import { FundInfo, SortType, TreeItemType } from '../shared/typed';
 import { randHeader, sortData } from '../shared/utils';
 import { LeekService } from './leekService';
+
+const BINANCE_HOST = 'data-api.binance.vision';
+const BINANCE_TIMEOUT = 10000;
+
+/** no_proxy/NO_PROXY 中命中 Binance 域名时不使用代理 */
+function shouldBypassProxy(): boolean {
+  const noProxy = process.env.no_proxy || process.env.NO_PROXY || '';
+  return noProxy.split(',').some((rule) => {
+    const entry = rule.trim().toLowerCase();
+    if (!entry) return false;
+    if (entry === '*') return true;
+    const domain = entry.replace(/^\./, '');
+    return BINANCE_HOST === domain || BINANCE_HOST.endsWith(`.${domain}`);
+  });
+}
+
+/**
+ * 代理来源：VS Code 设置 http.proxy > 环境变量 https_proxy/http_proxy。
+ * Binance 域名在国内网络需代理才能访问；未配置时返回 undefined，由 axios 自行处理环境变量。
+ */
+function getBinanceProxy(): AxiosRequestConfig['proxy'] {
+  if (shouldBypassProxy()) return false;
+  const proxyUrl =
+    workspace.getConfiguration('http').get<string>('proxy') ||
+    process.env.https_proxy ||
+    process.env.HTTPS_PROXY ||
+    process.env.http_proxy ||
+    process.env.HTTP_PROXY ||
+    '';
+  if (!proxyUrl) return undefined;
+  try {
+    const url = new URL(proxyUrl);
+    const protocol = url.protocol.replace(':', '');
+    if (protocol === 'socks' || protocol === 'socks5' || protocol === 'socks5h' || protocol === 'socks4') {
+      console.error('[binance] axios 不支持 socks 代理，请改用 HTTP 代理地址（如 Clash 的 mixed-port）');
+      return undefined;
+    }
+    return {
+      protocol,
+      host: url.hostname,
+      port: Number(url.port || (protocol === 'https' ? 443 : 80)),
+      ...(url.username
+        ? { auth: { username: decodeURIComponent(url.username), password: decodeURIComponent(url.password) } }
+        : {}),
+    };
+  } catch {
+    console.error('[binance] 代理地址格式无效：', proxyUrl);
+    return undefined;
+  }
+}
+
+function binanceRequestOptions(): AxiosRequestConfig {
+  return {
+    headers: randHeader(),
+    timeout: BINANCE_TIMEOUT,
+    proxy: getBinanceProxy(),
+  };
+}
+
+/** 请求失败时给出可操作的提示 */
+function networkHint(): string {
+  return getBinanceProxy()
+    ? '（请检查代理是否可用）'
+    : '（国内网络需开启代理，并在 VS Code 设置 http.proxy 或环境变量 https_proxy 中配置 HTTP 代理地址）';
+}
 
 export default class BinanceService extends LeekService {
   private context: ExtensionContext;
@@ -23,10 +88,8 @@ export default class BinanceService extends LeekService {
 
   /** 获取支持的交易对 */
   async getParis(): Promise<string[]> {
-    const res: any = await Axios.get(this.parisUrl, {
-      headers: randHeader(),
-    }).catch((err) => {
-      console.error('[binance] 获取交易对失败', this.parisUrl, err && err.message);
+    const res: any = await Axios.get(this.parisUrl, binanceRequestOptions()).catch((err) => {
+      console.error('[binance] 获取交易对失败', this.parisUrl, err && err.message, networkHint());
     });
     if (res && res.data) {
       return res.data.symbols?.map((i: any) => `${i.baseAsset}_${i.quoteAsset}`);
@@ -37,13 +100,13 @@ export default class BinanceService extends LeekService {
   async _fetchPairData(symbolsWithSplit: string[]): Promise<{ data: any, symbol: string }[]> {
     const symbols = JSON.stringify(symbolsWithSplit.map(sws => sws.split('_').join('')));
     return await Axios.get<{ data: any[] }>(this.ticker24hrUrl, {
+      ...binanceRequestOptions(),
       params: { symbols },
-      headers: randHeader(),
     }).then(res => symbolsWithSplit.map(symbol => {
       const target = (res.data as any).find((data: any) => data.symbol === symbol.split('_').join(''));
       return ({ data: target, symbol });
     })).catch((err) => {
-      console.error('[binance] 获取 24h 行情失败', this.ticker24hrUrl, err && err.message);
+      console.error('[binance] 获取 24h 行情失败', this.ticker24hrUrl, err && err.message, networkHint());
       return Promise.reject(symbolsWithSplit.map(symbol => ({ data: null, symbol })));
     });
   }
@@ -77,7 +140,7 @@ export default class BinanceService extends LeekService {
       // @ts-ignore
       const { status, value, reason } = splitRes;
       for (const item of (value || reason)) {
-        if (status === 'fulfilled') {
+        if (status === 'fulfilled' && item.data) {
           const {
             data,
             symbol,
