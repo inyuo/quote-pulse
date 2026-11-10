@@ -9,6 +9,7 @@
  * console.error 只打 message，不打完整 axios 错误对象。
  */
 import axios from 'axios';
+import { postLjgx as postViaDataApi, isEnabled as isDataApiEnabled } from './dataApiClient';
 
 const LJGX_API_BASE = 'https://www.xxjwxc.cn/shares/api/v1';
 const LJGX_TIMEOUT = 30000;
@@ -312,6 +313,14 @@ export async function ljgxPostAuth(
 ): Promise<any> {
   const store = deps && deps.store;
   const session = store ? loadSession(store) : null;
+
+  // 服务端模式：由服务端轮询多 sessionId 取数；失败时若有本地会话再回退直连
+  if (!(deps && deps.axios) && isDataApiEnabled()) {
+    const payload = await postViaDataApi(path, body);
+    if (payload !== null) return payload;
+    if (!session || !store) return null;
+  }
+
   if (!session || !store) return null; // 未登录无凭据，直接降级（不发请求）
 
   const client = (deps && deps.axios) || axios;

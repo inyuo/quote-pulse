@@ -628,6 +628,16 @@
           ],
           "description": "配置需要监控的交易对（建议通过界面新增）"
         },
+        "leek-fund.dataApiBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "数据服务地址（如 http://124.71.128.214:8800）。留空则使用插件本地直连与扫码登录"
+        },
+        "leek-fund.dataApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "数据服务 API Key（服务端 /etc/qp-data-service.env 中的 QP_API_KEY）"
+        },
         "leek-fund.stocksRemind": {
           "type": "object",
           "description": "股票涨跌提醒，支持价格、涨跌幅。"

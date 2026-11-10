@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getPublic as getViaDataApi, isEnabled as isDataApiEnabled } from './dataApiClient';
 
 /**
  * 东财资金流备源。
@@ -69,17 +70,30 @@ export function parseEastIndustryFlow(payload: any): EastIndustryItem[] {
   return rows;
 }
 
+/** 服务端模式代发 GET，失败回退直连；返回类 axios 响应 */
+async function emGet(url: string): Promise<{ status: number; data: any } | null> {
+  if (isDataApiEnabled()) {
+    const proxied = await getViaDataApi(url);
+    if (proxied) return proxied;
+  }
+  try {
+    return await axios.get(url, {
+      headers: { Referer: EM_REFERER, 'User-Agent': DEFAULT_UA },
+      timeout: EM_TIMEOUT,
+      validateStatus: () => true,
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
 /** 单次请求东财行业资金流（内部，由 fetchEastIndustryFlow 负责重试） */
 async function fetchEastIndustryFlowOnce(): Promise<EastIndustryItem[]> {
   try {
     const url =
       `${EM_API_BASE}/clist/get?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f62` +
       '&fs=m:90+t:2&fields=f12,f14,f62,f184';
-    const res = await axios.get(url, {
-      headers: { Referer: EM_REFERER, 'User-Agent': DEFAULT_UA },
-      timeout: EM_TIMEOUT,
-      validateStatus: () => true,
-    });
+    const res = await emGet(url);
     if (!res || res.status >= 400) {
       console.error('[EM] HTTP error industry flow', res && res.status);
       return [];
@@ -120,11 +134,7 @@ export async function fetchEastStockMainFlow(code: string): Promise<number | nul
     const url =
       `${EM_API_BASE}/fflow/kline/get?secid=${secid}` +
       '&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56&klt=101&lmt=1';
-    const res = await axios.get(url, {
-      headers: { Referer: EM_REFERER, 'User-Agent': DEFAULT_UA },
-      timeout: EM_TIMEOUT,
-      validateStatus: () => true,
-    });
+    const res = await emGet(url);
     if (!res || res.status >= 400) return null;
 
     const klines = res.data && res.data.data && res.data.data.klines;

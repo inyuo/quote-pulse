@@ -40,6 +40,7 @@ import {
   fetchLqList,
 } from '../shared/lqData';
 import { quantLogin } from './quantLogin';
+import { isEnabled as isDataApiEnabled } from '../shared/dataApiClient';
 
 const VIEW_TYPE = 'leek-fund.quant';
 const TITLE = '量价掘金';
@@ -97,6 +98,7 @@ function cjlCodes(): string[] {
 
 /** 是否已登录（loadSession 有效会话；读取异常视为未登录，不抛错） */
 function isLogged(): boolean {
+  if (isDataApiEnabled()) return true; // 服务端代持会话，本地无需扫码
   const store = panelStore;
   if (!store) return false;
   try {
