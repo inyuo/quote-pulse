@@ -31,7 +31,6 @@ import { QuantProvider, registerQuantProviderForRefresh } from './explorer/quant
 import { StockProvider } from './explorer/stockProvider';
 import StockService from './explorer/stockService';
 import globalState from './globalState';
-import FlashNewsOutputServer from './output/flash-news/FlashNewsOutputServer';
 import { LeekFundConfig } from './shared/leekConfig';
 import { LeekTreeItem } from './shared/leekTreeItem';
 import { createVscodeStorage } from './shared/ljgxData';
@@ -61,32 +60,16 @@ export function registerViewEvent(
   fundProvider: FundProvider,
   stockProvider: StockProvider,
   newsProvider: NewsProvider,
-  flashNewsOutputServer: FlashNewsOutputServer,
   binanceProvider: BinanceProvider,
   forexProvider: ForexProvider
 ) {
   const binanceService = new BinanceService(context);
 
   context.subscriptions.push(
-    commands.registerCommand('leek-fund.toggleFlashNews', () => {
-      const isEnable = LeekFundConfig.getConfig('leek-fund.flash-news');
-      LeekFundConfig.setConfig('leek-fund.flash-news', !isEnable).then(() => {
-        window.showInformationMessage(`已${isEnable ? '关闭' : '启用'} OUTPUT 的 Flash News！`);
-      });
-    })
-  );
-
-  context.subscriptions.push(
     commands.registerCommand('leek-fund.refreshFollow', async () => {
       // force：清缓存重新拉取，否则重绘时会命中 TTL 缓存导致"刷新不变"
       await newsProvider.refresh(true);
       window.showInformationMessage(`刷新成功`);
-    })
-  );
-
-  context.subscriptions.push(
-    commands.registerCommand('leek-fund.flash-news-show', () => {
-      flashNewsOutputServer.showOutput();
     })
   );
 
@@ -916,13 +899,6 @@ export function registerViewEvent(
   );
 
 
-  // 个股新闻命令（数据源：韭研公社个股新闻）
-  context.subscriptions.push(
-    commands.registerCommand('leek-fund.stockNews', (stock?: string) => {
-      const { StockNewsView } = require('./webview/stock-news-view');
-      StockNewsView.getInstance().show(stock);
-    })
-  );
   // 设置个股 AI 分析历史长度（A 股 / 港股均生效）
   context.subscriptions.push(
     commands.registerCommand('leek-fund.setAiStockHistoryRange', async () => {
@@ -955,7 +931,7 @@ export function registerViewEvent(
 
 /**
  * 量价掘金（量化面板）命令注册：
- * - quantLogin / quantOpen 懒加载登录面板与 4-tab 量化面板；
+ * - quantLogin / quantOpen 懒加载登录面板与 5-tab 量化面板；
  * - refreshQuant 重新校验会话并重绘（暗盘榜单已于 2026-11-04 移除）；
  * - 启动时静默校验会话（不 await，完成后自动重绘）。
  */
@@ -973,13 +949,13 @@ export function registerQuant(context: ExtensionContext, quantProvider: QuantPro
   );
   context.subscriptions.push(
     commands.registerCommand('leek-fund.quantOpen', (target) => {
-      /* 量化面板（tab：cjl 量价分层 / north 北向 / index 大盘 / lq 策略选股）。
+      /* 量化面板（tab：cjl 量价分层 / north 北向 / index 大盘 / lq 策略选股 / collision 数据碰撞）。
          登录存储引用在开面板前注入 —— 面板未登录引导的 openLogin 会直接打开登录面板 */
       const { initQuantLogin } = require('./webview/quantLogin');
       const { initQuantPanel, quantPanel } = require('./webview/quantPanel');
       initQuantLogin(createVscodeStorage(context.globalState));
       initQuantPanel(createVscodeStorage(context.globalState));
-      const VALID_TABS = ['cjl', 'north', 'index', 'lq'];
+      const VALID_TABS = ['cjl', 'north', 'index', 'lq', 'collision'];
       const tab =
         target && VALID_TABS.indexOf(target.tab) !== -1 ? target.tab : 'north';
       // code 可选：预留个股量价分层查询（tab==='cjl' 时替代默认指数集合）

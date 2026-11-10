@@ -5,7 +5,16 @@
  * 这里用内存 store + 注入的 axios 假对象验证：元数据、载荷归一化、请求契约与降级。
  */
 const assert = require('assert');
-const { LQ_TAGS, LQ_DAYS, toAShareCode, normalizeLqGroups, fetchLqList } = require('../out/shared/lqData');
+const {
+  LQ_TAGS,
+  LQ_DAYS,
+  LQ_COLLISION_DAYS,
+  DEFAULT_COLLISION_DAYS,
+  toAShareCode,
+  normalizeLqGroups,
+  fetchLqList,
+  collideLqResults,
+} = require('../out/shared/lqData');
 
 const SESSION_KEY = 'leek-fund.ljgxSession';
 
@@ -187,5 +196,118 @@ describe('策略榜单拉取 fetchLqList', () => {
     });
     assert.strictEqual(boom, null);
     assert.strictEqual(bad, null);
+  });
+});
+
+/** 单组 LqResult 构造器：pairs 为 [code, name] 二元组 */
+function lqRows(pairs) {
+  return {
+    groups: [
+      {
+        title: 'g',
+        rows: pairs.map((p) => ({ code: p[0], name: p[1] || '', percent: null, note: '' })),
+      },
+    ],
+    hyTags: [],
+    tsTags: [],
+  };
+}
+
+/** 按 LQ_TAGS 顺序构造 9 项输入；map 中未出现的 tag 视为拉取失败 null */
+function lqItems(map) {
+  return LQ_TAGS.map((t) => ({
+    tag: t.tag,
+    result: Object.prototype.hasOwnProperty.call(map, t.tag) ? map[t.tag] : null,
+  }));
+}
+
+/** 设计示例中的「近5天」9 类策略命中（cx 次新股为空榜） */
+function sampleItems() {
+  return lqItems({
+    cd: lqRows([['sz300750', '宁德时代'], ['sh601127', '赛力斯'], ['sz000001', '平安银行']]),
+    qs: lqRows([['sz300750', '宁德时代'], ['sh601127', '赛力斯'], ['sz002594', '比亚迪']]),
+    dwfl: lqRows([['sz002594', '比亚迪'], ['sh600036', '招商银行']]),
+    szx: lqRows([['sz000001', '平安银行']]),
+    ztb: lqRows([['sh601127', '赛力斯'], ['sz300750', '宁德时代']]),
+    cx: lqRows([]),
+    hy: lqRows([['sz002594', '比亚迪']]),
+    jzc: lqRows([['sh600036', '招商银行']]),
+    fk: lqRows([['sz300750', '宁德时代'], ['sh601127', '赛力斯']]),
+  });
+}
+
+describe('数据碰撞 collideLqResults', () => {
+  it('碰撞天数为 6 档（去掉近1/近30），默认近5天，且都来自官网 8 档', () => {
+    assert.deepStrictEqual(LQ_COLLISION_DAYS.map((d) => d.num), [3, 5, 10, 20, 60, 100]);
+    assert.strictEqual(DEFAULT_COLLISION_DAYS, 5);
+    assert.ok(LQ_COLLISION_DAYS.every((d) => LQ_DAYS.some((x) => x.num === d.num)));
+  });
+
+  it('9 类策略碰撞：只留命中≥2，标签按策略顺序，命中降序/代码升序', () => {
+    const r = collideLqResults(sampleItems());
+    assert.strictEqual(r.total, 9);
+    assert.strictEqual(r.available, 9);
+    assert.deepStrictEqual(r.rows, [
+      { code: 'sh601127', name: '赛力斯', hits: 4, tags: ['超跌', '趋势', '涨停', '风口'] },
+      { code: 'sz300750', name: '宁德时代', hits: 4, tags: ['超跌', '趋势', '涨停', '风口'] },
+      { code: 'sz002594', name: '比亚迪', hits: 3, tags: ['趋势', '低位', '板块'] },
+      { code: 'sh600036', name: '招商银行', hits: 2, tags: ['低位', '净增持'] },
+      { code: 'sz000001', name: '平安银行', hits: 2, tags: ['超跌', '十字星'] },
+    ]);
+  });
+
+  it('同一策略跨多个分组只算 1 次，裸 6 位与 sh/sz 前缀视为同一只', () => {
+    const r = collideLqResults([
+      {
+        tag: 'cd',
+        result: {
+          groups: [
+            { title: 'a', rows: [{ code: '300750', name: '宁德时代' }] },
+            { title: 'b', rows: [{ code: 'sz300750', name: '宁德时代' }] },
+          ],
+          hyTags: [],
+          tsTags: [],
+        },
+      },
+      { tag: 'qs', result: lqRows([['300750', '']]) },
+    ]);
+    assert.deepStrictEqual(r.rows, [
+      { code: 'sz300750', name: '宁德时代', hits: 2, tags: ['超跌', '趋势'] },
+    ]);
+  });
+
+  it('只命中 1 个策略的股票被过滤，名称取命中行里第一个非空值', () => {
+    const r = collideLqResults([
+      { tag: 'cd', result: lqRows([['600519', ''], ['000002', '万科A']]) },
+      { tag: 'qs', result: lqRows([['sh600519', '贵州茅台']]) },
+    ]);
+    assert.deepStrictEqual(r.rows, [
+      { code: 'sh600519', name: '贵州茅台', hits: 2, tags: ['超跌', '趋势'] },
+    ]);
+  });
+
+  it('部分策略失败 / 异常结构 / 未知 tag 均容错，available 只数成功项', () => {
+    assert.deepStrictEqual(collideLqResults(null), { rows: [], available: 0, total: 0 });
+    assert.deepStrictEqual(collideLqResults(undefined), { rows: [], available: 0, total: 0 });
+
+    const dirty = collideLqResults([
+      null,
+      { tag: 'cd', result: { groups: [{ title: 'g', rows: [null, { code: '' }, {}] }] } },
+      { tag: 'qs', result: { groups: 'bad' } },
+      { tag: 'ztb', result: null },
+    ]);
+    assert.deepStrictEqual(dirty, { rows: [], available: 2, total: 4 });
+
+    const partial = collideLqResults([
+      { tag: 'cd', result: lqRows([['000001', 'A'], ['000002', 'B']]) },
+      { tag: 'qs', result: null },
+    ]);
+    assert.deepStrictEqual(partial, { rows: [], available: 1, total: 2 });
+
+    const unknown = collideLqResults([
+      { tag: 'nope', result: lqRows([['000001', 'X']]) },
+      { tag: 'cd', result: lqRows([['000001', 'X']]) },
+    ]);
+    assert.deepStrictEqual(unknown.rows, [], '未知 tag 不应生成标签');
   });
 });

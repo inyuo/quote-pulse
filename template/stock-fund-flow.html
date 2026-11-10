@@ -322,6 +322,8 @@
       <span class="meta" id="updatedAt">加载中…</span>
       <span class="status" id="status"></span>
       <span class="spacer"></span>
+      <button class="btn" id="addStockBtn">加入自选</button>
+      <button class="btn" id="trendBtn">实时走势</button>
       <button class="btn" id="refreshBtn">刷新</button>
     </div>
 
@@ -395,6 +397,14 @@
         var selectedCode = saved.selectedCode || '';
         var stockRows = [];
         var currentFlow = null; // 当前展示的分时数据（供重绘用）
+        /** 本次 init 由宿主指定的外部个股（策略选股 / 数据碰撞跳入） */
+        var externalCode = '';
+        /** 已跳入过的外部个股：刷新后仍要保留在下拉里，直到面板销毁 */
+        var pinnedCode = '';
+        /** 宿主下发的 leek-fund.stocks，用于「加入自选」按钮状态 */
+        var watchlist = [];
+        var addingCode = ''; // 等待写配置回执，防重复点击
+        var listReady = false;
 
         function $(id) {
           return document.getElementById(id);
@@ -452,8 +462,10 @@
         function renderStockSelect(data) {
           stockRows = (data && data.stocks) || [];
           var html = '';
+          var hasPinned = false;
           for (var i = 0; i < stockRows.length; i++) {
             var r = stockRows[i];
+            if (r.code === pinnedCode) hasPinned = true;
             var label = r.name ? r.name + ' ' + r.code : r.code;
             html +=
               '<option value="' +
@@ -462,8 +474,31 @@
               escapeHtml(label) +
               '</option>';
           }
+          // 外部跳入的个股不一定在自选股配置里：补一个占位项，
+          // 否则下拉没有对应 option，选中态会被 autoSelect 回退成第一只自选股
+          if (pinnedCode && !hasPinned) {
+            stockRows.push({ code: pinnedCode, name: '' });
+            html +=
+              '<option value="' +
+              escapeHtml(pinnedCode) +
+              '">' +
+              escapeHtml(pinnedCode) +
+              '</option>';
+          }
           $('stockSelect').innerHTML = html;
           if (selectedCode) $('stockSelect').value = selectedCode;
+        }
+
+        /** 外部跳入股的名称要等 detail 回来才有，回填占位项后重绘下拉 */
+        function updateStockName(code, name) {
+          if (!code || !name) return;
+          for (var i = 0; i < stockRows.length; i++) {
+            if (stockRows[i].code === code && !stockRows[i].name) {
+              stockRows[i].name = name;
+              renderStockSelect({ stocks: stockRows });
+              return;
+            }
+          }
         }
 
         /** 行颜色只接受颜色字面量，挡掉服务端脏值注入 */
@@ -609,6 +644,7 @@
         }
 
         function renderDetail(d) {
+          updateStockName(d.code, d.name);
           $('detailHead').style.display = 'flex';
           $('detailHint').textContent = '';
 
@@ -919,11 +955,35 @@
         }
 
         /* ================= 交互 ================= */
+        /** 仅沪深 A 股个股可跳实时走势（与 stockTrend.canOpenFundFlow 同一规则） */
+        function canOpenTrend(code) {
+          return /^(sh|sz)\d{6}$/.test(code || '') && !/^(sh000|sz399)/.test(code);
+        }
+
+        /** 当前股票是否已在 leek-fund.stocks 里 */
+        function inWatchlist(code) {
+          for (var i = 0; i < watchlist.length; i++) {
+            if (watchlist[i] === code) return true;
+          }
+          return false;
+        }
+
+        /** 加入自选按钮：未加入可点，已在自选 / 请求中禁用 */
+        function updateAddStockBtn() {
+          var btn = $('addStockBtn');
+          var added = inWatchlist(selectedCode);
+          var pending = !!addingCode && addingCode === selectedCode;
+          btn.disabled = !listReady || !selectedCode || added || pending;
+          btn.textContent = added ? '已在自选' : pending ? '加入中…' : '加入自选';
+        }
+
         function selectStock(code) {
           if (!code) return;
           selectedCode = code;
           vscode.setState({ selectedCode: code });
           $('stockSelect').value = code;
+          $('trendBtn').disabled = !canOpenTrend(code);
+          updateAddStockBtn();
 
           // 三块表格跟随个股重拉，等 detail 回来再决定是否显示
           $('fundTables').innerHTML = '';
@@ -935,8 +995,14 @@
           vscode.postMessage({ command: 'select', code: code });
         }
 
-        /** 收到 init 后：恢复上次选中，否则选第一只 */
-        function autoSelect() {
+        /** 收到 init 后：外部指定股优先；否则恢复上次选中，再否则选第一只 */
+        function autoSelect(initialCode) {
+          // 策略选股 / 数据碰撞跳入的股票通常不在自选股列表里，
+          // 必须直接选中，不能因为找不到就回退到第一只自选股
+          if (initialCode) {
+            selectStock(initialCode);
+            return;
+          }
           if (selectedCode) {
             var found = false;
             for (var i = 0; i < stockRows.length; i++) {
@@ -957,9 +1023,14 @@
 
           if (msg.type === 'init') {
             setStatus('');
-            // 服务端指定的初始选中股（右键入口），优先于上次记忆
-            if (msg.data && msg.data.initialCode) {
-              selectedCode = msg.data.initialCode;
+            // 服务端指定的初始选中股（右键 / 策略选股 / 数据碰撞），优先于上次记忆
+            externalCode = (msg.data && msg.data.initialCode) || '';
+            watchlist = (msg.data && msg.data.watchlist) || [];
+            addingCode = '';
+            listReady = true;
+            if (externalCode) {
+              pinnedCode = externalCode;
+              selectedCode = externalCode;
               vscode.setState({ selectedCode: selectedCode });
             }
             renderStockSelect(msg.data);
@@ -968,12 +1039,34 @@
             $('updatedAt').textContent = ts
               ? '更新于 ' + new Date(ts).toLocaleTimeString()
               : '';
-            autoSelect();
+            autoSelect(externalCode);
+            updateAddStockBtn();
           } else if (msg.type === 'detail') {
             setStatus('');
             renderDetail(msg.data || {});
             renderFundTables(msg.data && msg.data.fundTables);
           }
+        });
+
+        // 顶栏「加入自选」→ 宿主写入 leek-fund.stocks 并刷新侧边栏 Stock 树
+        $('addStockBtn').addEventListener('click', function () {
+          if (!selectedCode || inWatchlist(selectedCode) || addingCode) return;
+          addingCode = selectedCode;
+          updateAddStockBtn();
+          vscode.postMessage({ command: 'addStock', code: selectedCode });
+        });
+
+        // 顶栏「实时走势」→ 宿主转发 leek-fund.stockItemClick 打开股票实时走势面板
+        $('trendBtn').addEventListener('click', function () {
+          if (!canOpenTrend(selectedCode)) return;
+          var name = '';
+          for (var i = 0; i < stockRows.length; i++) {
+            if (stockRows[i].code === selectedCode) {
+              name = stockRows[i].name || '';
+              break;
+            }
+          }
+          vscode.postMessage({ command: 'openTrend', code: selectedCode, name: name });
         });
 
         $('refreshBtn').addEventListener('click', function () {
@@ -1001,6 +1094,8 @@
 
         // 恢复上次选中项
         if (saved.selectedCode) selectedCode = saved.selectedCode;
+        $('trendBtn').disabled = !canOpenTrend(selectedCode);
+        updateAddStockBtn();
 
         setStatus('连接中…');
         vscode.postMessage({ command: 'ready' });

@@ -26,7 +26,7 @@ const AIChat = forwardRef<AIChatRef, AIChatProps>(({ onConfigClick }, ref) => {
   const [maximized, setMaximized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([{
     role: 'assistant',
-    content: '您好！我是AI投资助手，可以帮您分析市场行情、解读新闻快讯。有什么可以帮您的吗？'
+    content: '您好！我是AI投资助手，可以帮您分析市场行情、解读市场资讯。有什么可以帮您的吗？'
   }]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);

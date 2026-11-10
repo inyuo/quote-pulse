@@ -4,13 +4,10 @@ import { commands, ViewColumn, Webview, window } from 'vscode';
 import FundService from '../explorer/fundService';
 import StockService from '../explorer/stockService';
 import globalState from '../globalState';
-import { FlashNewsServerInterface } from '../output/flash-news/NewsFlushServiceAbstractClass';
 import { LeekFundConfig } from '../shared/leekConfig';
 import { LeekTreeItem } from '../shared/leekTreeItem';
 import { events, formatHTMLWebviewResourcesUrl, getTemplateFileContent } from '../shared/utils';
 import { AiService } from './leek-center/ai-service';
-import { StockNewsService } from './leek-center/stock-news-service';
-import LeekCenterFlashNewsView from './leek-center/flash-news-view';
 import ReusedWebviewPanel from './ReusedWebviewPanel';
 import { getEastMoneyHost, getEastmoneyPort } from './proxyService/proxyConfig';
 
@@ -28,15 +25,13 @@ function leekCenterView(stockService: StockService, fundServices: FundService) {
   _INITED = true;
   panelEvents = new EventEmitter();
 
-  let flashNewsServer: FlashNewsServerInterface | undefined;
   // const transceiver = transceiverFactory(panel.webview); 备用
 
   setList(panel.webview, panelEvents, stockService, fundServices);
   setStocksRemind(panel.webview, panelEvents);
   // setDiscussions(panel.webview, panelEvents);
 
-  const stockNewsService = new StockNewsService(panel.webview);
-  const aiService = new AiService(panel.webview, stockNewsService);
+  const aiService = new AiService(panel.webview);
 
   panel.webview.onDidReceiveMessage(async (message) => {
     panelEvents.emit('onDidReceiveMessage', message);
@@ -49,7 +44,6 @@ function leekCenterView(stockService: StockService, fundServices: FundService) {
         return;
       case 'pageReady':
         panelEvents.emit('pageReady');
-        flashNewsServer = new LeekCenterFlashNewsView(panel.webview);
         return;
       case 'executeCommand':
         commands.executeCommand(message.data);
@@ -72,12 +66,6 @@ function leekCenterView(stockService: StockService, fundServices: FundService) {
         return;
       }
 
-      case 'getNewsData':
-      case 'refreshNews':
-        // 资讯源为韭研公社个股新闻，必须指定股票（名称或代码）
-        stockNewsService.getNewsData(message.data?.stock);
-        return;
-
       case 'getAiConfig':
       case 'updateAiConfig':
       case 'sendAIMessage':
@@ -88,7 +76,6 @@ function leekCenterView(stockService: StockService, fundServices: FundService) {
 
   panel.onDidDispose(() => {
     panelEvents.emit('onDidDispose');
-    flashNewsServer?.destroy();
     _INITED = false;
   });
 

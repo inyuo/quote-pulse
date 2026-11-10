@@ -112,3 +112,144 @@ describe('韭研新闻附录 buildJygNewsAppendix', () => {
     assert.strictEqual(buildJygNewsAppendix('x', null), '');
   });
 });
+
+describe('个股 AI 分析提示词与上下文 aiStockPrompt', () => {
+  const prompt = require('../out/shared/aiStockPrompt');
+
+  const CSV = [
+    '日期,开盘,收盘,涨跌幅,最低,最高,成交量(手),成交额(万)',
+    '2026-11-07,101,105,1.20%,100,106,1000,5000',
+    '2026-11-06,100,102,0.50%,99,103,800,4000',
+    '2026-11-05,99,100,0.10%,98,101,600,3000',
+    '2026-11-04,98,99,-0.20%,97,100,500,2500',
+    '2026-11-03,97,100,0.30%,96,101,400,2000',
+  ].join('\n');
+
+  it('区间统计摘要：涨跌幅、收盘高低、量能变化，空输入返回空串', () => {
+    const s = prompt.summarizeQfqCsv(CSV);
+    assert.ok(s.includes('区间涨跌幅') && s.includes('5.00%'), `应给出区间涨跌幅，实际：${s}`);
+    assert.ok(s.includes('最高收盘') && s.includes('最低收盘'), s);
+    assert.ok(s.includes('量能'), s);
+    assert.strictEqual(prompt.summarizeQfqCsv(''), '');
+    assert.strictEqual(prompt.summarizeQfqCsv('日期,开盘,收盘'), '');
+  });
+
+  it('超长日线按等间隔采样并标记，未超限原样返回', () => {
+    const rows = [];
+    for (let i = 0; i < 200; i++) {
+      rows.push(`2026-01-${String(i + 1).padStart(2, '0')},1,${i + 1},0%,1,1,${100 + i},100`);
+    }
+    const long = '日期,开盘,收盘,涨跌幅,最低,最高,成交量(手),成交额(万)\n' + rows.join('\n');
+    const r = prompt.compactQfqCsv(long, 50);
+    assert.strictEqual(r.sampled, true);
+    assert.ok(r.text.split('\n').length <= 51, `采样后行数应受控：${r.text.split('\n').length}`);
+    assert.ok(r.text.startsWith('日期,开盘,收盘'), '应保留表头');
+
+    const short = prompt.compactQfqCsv(CSV, 50);
+    assert.strictEqual(short.sampled, false);
+    assert.strictEqual(short.text, CSV);
+  });
+
+  it('量价分层附录：标注累计成交额口径、时点数、增量峰值与尾段占比', () => {
+    const price = [];
+    let acc = 100;
+    for (let i = 0; i < 30; i++) {
+      acc += i === 10 ? 50 : 5;
+      price.push(acc);
+    }
+    const s = prompt.buildCjlAppendixForAi({ tm: '2026-11-07', price });
+    assert.ok(s.includes('分时累计成交额') && s.includes('非股价'), s);
+    assert.ok(s.includes('时点数：30'), s);
+    assert.ok(s.includes('单时点最大增量'), s);
+    assert.ok(s.includes('尾段'), s);
+    assert.strictEqual(prompt.buildCjlAppendixForAi(null), '');
+    assert.strictEqual(prompt.buildCjlAppendixForAi({ tm: '', price: [] }), '');
+  });
+
+  it('资金动态附录：实时行情/分时主力/板块/三表/行业 Top10，脏数据不产生 undefined', () => {
+    const detail = {
+      code: 'sh600519',
+      name: '贵州茅台',
+      price: 1333.1,
+      percent: -0.14,
+      mainFlow: { tm: '09:30-15:00', main: [1000, 2000, 3000], price: [] },
+      analysis: [{ name: 'PEG估值', msgs: ['peg:-4.9'] }],
+      sectors: [{ name: '白酒', percent: 1.2 }],
+      fundTables: [
+        { title: '主力分析', columns: ['日期', '得分'], rows: [{ cells: ['11-07', '77'] }] },
+      ],
+    };
+    const industries = Array.from({ length: 15 }, (_, i) => ({
+      code: 'BK' + i,
+      name: '行业' + i,
+      amount: 100 - i,
+      ratio: 1,
+    }));
+    const s = prompt.buildFundFlowAppendixForAi(detail, industries);
+    assert.ok(s.includes('实时行情') && s.includes('1333.10') && s.includes('-0.14'), s);
+    assert.ok(s.includes('分时主力') && s.includes('累计'), s);
+    assert.ok(s.includes('白酒'), s);
+    assert.ok(s.includes('主力分析') && s.includes('77'), s);
+    assert.ok(s.includes('行业资金流') && s.includes('行业9'), s);
+    assert.ok(!s.includes('行业14'), '行业排名应限制 Top10');
+    assert.ok(!s.includes('undefined'), `脏数据不应出现 undefined：${s}`);
+    assert.strictEqual(prompt.buildFundFlowAppendixForAi(null, []), '');
+  });
+
+  it('system prompt：中文、只用给定数据、禁止编造、累计序列语义、免责声明', () => {
+    const s = prompt.AI_STOCK_SYSTEM_PROMPT;
+    assert.ok(s.includes('中文'));
+    assert.ok(s.includes('不得') || s.includes('禁止'));
+    assert.ok(s.includes('免责') || s.includes('不构成投资建议'));
+    assert.ok(s.includes('累计') && s.includes('求和'), '应提示累计序列语义');
+  });
+
+  it('user prompt：结构化小节 + 数据边界 + 统计摘要 + 四类数据，缺失维度明确标注', () => {
+    const { system, user } = prompt.buildAiStockAnalysisPrompt({
+      name: '贵州茅台',
+      code: 'sh600519',
+      rangeLabel: '近3个月',
+      asOf: '2026-11-07',
+      qfqCsv: CSV,
+      qfqSourceLabel: '搜狐财经',
+      qfqSampled: false,
+      newsAppendix: '',
+      fundFlowAppendix: '资金段',
+      cjlAppendix: '',
+    });
+    assert.ok(system.length > 50);
+    assert.ok(user.includes('【任务】') && user.includes('贵州茅台') && user.includes('sh600519'), user);
+    assert.ok(user.includes('近3个月') && user.includes('搜狐财经'), user);
+    assert.ok(user.includes('## 1. 结论') && user.includes('## 6. 免责声明'), '应给出结构化输出小节');
+    assert.ok(user.includes('累计成交额'), user);
+    assert.ok(user.includes('区间统计摘要') && user.includes('5.00%'), user);
+    assert.ok(user.includes('【数据 3｜资金动态】') && user.includes('资金段'), user);
+    assert.ok(user.includes('该维度数据缺失'), '空附录应明确标注缺失');
+    assert.ok(!user.includes('undefined'), user);
+  });
+
+  it('宿主改用新提示词与资金动态/量价分层取数', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'webview', 'stock-news-view.ts'),
+      'utf8'
+    );
+    assert.ok(src.includes('AI_STOCK_SYSTEM_PROMPT'), 'system 应使用统一常量');
+    assert.ok(src.includes('buildAiStockAnalysisPrompt'), 'user 应由纯函数构建');
+    assert.ok(src.includes('loadStockDetail') && src.includes('loadIndustryRows'), '应取资金动态个股详情与行业排名');
+    assert.ok(src.includes('fetchShareCjl'), '应取量价分层数据');
+    assert.ok(src.includes('classifyAiResult'), '结果判定应走精确分类，避免误伤模型正文');
+  });
+
+  it('结果判定：只认宿主固定错误文案，模型正文含「不可用/失败」不误判', () => {
+    assert.strictEqual(typeof prompt.classifyAiResult, 'function', '应导出结果判定函数');
+    assert.strictEqual(prompt.classifyAiResult('AI配置不完整,请检查配置'), 'config');
+    assert.strictEqual(prompt.classifyAiResult('抱歉，AI服务暂时不可用，请稍后再试'), 'service');
+    assert.strictEqual(prompt.classifyAiResult('抱歉，我没有收到回复'), 'service');
+    assert.strictEqual(
+      prompt.classifyAiResult('## 4. 风险提示\n- 部分资金数据不可用，结论置信度低'),
+      'ok'
+    );
+    assert.strictEqual(prompt.classifyAiResult(''), 'ok');
+  });
+});

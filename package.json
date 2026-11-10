@@ -276,14 +276,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "leek-fund.toggleFlashNews",
-        "title": "启用/关闭 OUTPUT Flash News",
-        "icon": {
-          "light": "resources/light/news.svg",
-          "dark": "resources/dark/news.svg"
-        }
-      },
-      {
         "command": "leek-fund.addBinancePair",
         "title": "添加交易对",
         "icon": "$(add)"
@@ -332,14 +324,6 @@
         "icon": {
           "light": "resources/light/sort.svg",
           "dark": "resources/dark/sort.svg"
-        }
-      },
-      {
-        "command": "leek-fund.stockNews",
-        "title": "个股新闻（韭研公社）",
-        "icon": {
-          "light": "resources/light/news.svg",
-          "dark": "resources/dark/news.svg"
         }
       },
       {
@@ -437,11 +421,6 @@
         },
         {
           "command": "leek-fund.refreshFollow",
-          "when": "view == leekFundView.news",
-          "group": "navigation"
-        },
-        {
-          "command": "leek-fund.toggleFlashNews",
           "when": "view == leekFundView.news",
           "group": "navigation"
         },
@@ -749,16 +728,6 @@
           "default": true,
           "description": "沉浸式背景（仅适配暗色主题）"
         },
-        "leek-fund.flash-news": {
-          "type": "boolean",
-          "default": true,
-          "description": "开启快讯输出（查看 - 输出 - 行情脉冲快讯）"
-        },
-        "investment-monitor.flash-news-important-only": {
-          "type": "boolean",
-          "default": false,
-          "description": "仅显示「重要」快讯（过滤一般消息，重要消息以 🔴 标记）。当前快讯源为金十数据"
-        },
         "investment-monitor.expandAStock": {
           "type": "boolean",
           "default": true,
@@ -811,7 +780,7 @@
       },
       {
         "view": "leekFundView.stock",
-        "contents": "\n [📰 个股新闻（韭研公社）](command:leek-fund.stockNews)\n无数据，请检查网络或添加股票"
+        "contents": "无数据，请检查网络或添加股票"
       },
       {
         "view": "leekFundView.binance",

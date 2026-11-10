@@ -1,14 +1,13 @@
 import { Webview, workspace, window } from 'vscode';
 import OpenAI from 'openai';
 import { fetchJYGNewsByCode } from '../jiuyangongshe-news';
-import { StockNewsService } from './stock-news-service';
 import { fetchRecentQfqTradeDataForAi } from '../../shared/aiStockHistoryData';
 import { fetchStockMainFlow, fetchStockAnalysis, buildStockMoneyFlowAppendix } from '../../shared/xxjwxcData';
 
 export class AiService {
   private aiStockAnalysisInProgress = false;
 
-  constructor(private webview: Webview, private stockNewsService: StockNewsService) {}
+  constructor(private webview: Webview) {}
 
   async handleMessage(message: any) {
     switch (message.command) {

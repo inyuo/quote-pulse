@@ -213,6 +213,62 @@
       .lq-placeholder.retriable {
         cursor: pointer;
       }
+
+      /* ---------- 数据碰撞（第 5 个顶层 tab） ---------- */
+      .collision-wrap {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        padding: 8px 12px 16px;
+        display: none;
+      }
+      .collision-title {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 0 8px;
+      }
+      #collisionSummary {
+        color: var(--vscode-descriptionForeground, #999);
+        font-weight: 400;
+        font-size: 11px;
+        margin-left: 6px;
+      }
+      .collision-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .collision-table th {
+        text-align: left;
+        font-weight: 400;
+        color: var(--vscode-descriptionForeground, #999);
+        padding: 4px 6px;
+      }
+      .collision-table td {
+        padding: 4px 6px;
+        border-bottom: 1px solid var(--vscode-panel-border, rgba(68, 68, 68, 0.4));
+        vertical-align: top;
+      }
+      .collision-table tr:hover {
+        background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.05));
+      }
+      .lq-hit-tag {
+        display: inline-block;
+        margin: 0 4px 2px 0;
+        padding: 1px 6px;
+        border-radius: 9px;
+        font-size: 11px;
+        border: 1px solid var(--vscode-panel-border, #444);
+        color: var(--vscode-descriptionForeground, #999);
+      }
+      .collision-placeholder {
+        padding: 18px 0;
+        text-align: center;
+        color: var(--vscode-descriptionForeground, #999);
+      }
+      .collision-placeholder.retriable {
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -229,6 +285,7 @@
       <button class="tab" id="tabNorth" data-tab="north">北向资金</button>
       <button class="tab" id="tabIndex" data-tab="index">大盘指数</button>
       <button class="tab" id="tabLq" data-tab="lq">策略选股</button>
+      <button class="tab" id="tabCollision" data-tab="collision">数据碰撞</button>
     </div>
 
     <div class="chart-wrap" id="chartWrap">
@@ -241,6 +298,12 @@
       <div class="lq-bar" id="lqDays"></div>
       <div class="lq-links" id="lqTsTags"></div>
       <div id="lqGroups"></div>
+    </div>
+
+    <div class="collision-wrap" id="collisionWrap">
+      <div class="collision-title">数据碰撞 <span id="collisionSummary"></span></div>
+      <div class="lq-bar" id="collisionDays"></div>
+      <div id="collisionBody"></div>
     </div>
 
     <script>
@@ -265,6 +328,10 @@
         var LQ_DAY_META = [];
         var currentLqTag = 'ztb';
         var currentLqDays = 1;
+        /** 右侧数据碰撞：6 档窗口元数据、当前窗口、最近一次碰撞结果（undefined=未收到） */
+        var COLLISION_DAY_META = [];
+        var currentCollisionDays = 5;
+        var collision = undefined;
 
         var PAL_VARS = [
           ['--vscode-charts-red', '#f14c4c'],
@@ -300,8 +367,8 @@
         }
 
         function updateTabs() {
-          var keys = ['cjl', 'north', 'index', 'lq'];
-          var ids = ['tabCjl', 'tabNorth', 'tabIndex', 'tabLq'];
+          var keys = ['cjl', 'north', 'index', 'lq', 'collision'];
+          var ids = ['tabCjl', 'tabNorth', 'tabIndex', 'tabLq', 'tabCollision'];
           for (var i = 0; i < keys.length; i++) {
             $(ids[i]).className = 'tab' + (keys[i] === currentTab ? ' active' : '');
           }
@@ -369,59 +436,164 @@
           return { min: min - pad, max: max + pad };
         }
 
-        /* ================= Tab 1：量价分层（横向柱状分布） ================= */
-        /** get_share_cjl 的 price 为分层累计数组（升序），语义是各档位成本/持仓分布 */
+        /* ================= Tab 1：量价分层（分时累计成交额） ================= */
+        /**
+         * get_share_cjl 的 price 是**分时累计成交额（元）**，实测 121/242 个分钟点，
+         * 量级 1e9~1e11。旧实现把每个点画成一根横向柱并逐点标 L1/原始值，
+         * 121 根柱挤在 300px 里、12 位数字越出画布，糊成「一堆线和数字」。
+         * 现在改为：上方累计曲线（面积）+ 下方每分钟增量细柱，
+         * 只标 5 条纵轴刻度（亿/万）、5 个分时刻度与 2 条图例。
+         */
+        function formatAmount(v) {
+          var a = Math.abs(v);
+          if (a >= 1e12) return (v / 1e12).toFixed(2) + '万亿';
+          if (a >= 1e8) return (v / 1e8).toFixed(a >= 1e10 ? 0 : 2) + '亿';
+          if (a >= 1e4) return (v / 1e4).toFixed(0) + '万';
+          return String(Math.round(v));
+        }
+
+        /** 分时序号 → 交易时刻：上午 09:30 起 121 点，下午 13:00 起，末尾钳到 15:00 */
+        function minuteLabel(i) {
+          var mins = i < 121 ? 9 * 60 + 30 + i : 13 * 60 + (i - 121);
+          if (mins > 15 * 60) mins = 15 * 60;
+          var hh = Math.floor(mins / 60);
+          var mm = mins % 60;
+          return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+        }
+
         function drawCjl(data) {
           withCanvas(function (ctx, w, h) {
             var price = (data && data.price) || [];
             var rows = [];
             for (var i = 0; i < price.length; i++) {
-              // price 元素可能为 null：跳过该档位
-              if (typeof price[i] === 'number' && isFinite(price[i])) {
-                rows.push(price[i]);
-              }
+              // price 元素可能为 null：跳过该点（数据层已过滤，这里再兜一层）
+              if (typeof price[i] === 'number' && isFinite(price[i])) rows.push(price[i]);
             }
             if (!rows.length) return;
 
-            var padL = 56;
-            var padR = 56;
-            var padT = 22;
-            var padB = 10;
+            var padL = 62;
+            var padR = 16;
+            var padT = 30;
+            var padB = 22;
             var plotW = w - padL - padR;
             var plotH = h - padT - padB;
             if (plotW <= 0 || plotH <= 0) return;
 
-            var fg = cssVar('--vscode-descriptionForeground', '#9d9d9d');
-            var maxAbs = 0;
-            for (var r = 0; r < rows.length; r++) {
-              maxAbs = Math.max(maxAbs, Math.abs(rows[r]));
+            var curveH = plotH * 0.72;
+            var barH = plotH - curveH - 10;
+            if (barH < 12) {
+              curveH = plotH;
+              barH = 0;
             }
-            if (maxAbs <= 0) maxAbs = 1;
 
-            var rowH = plotH / rows.length;
-            var tm = data && data.tm ? data.tm : '';
+            var fg = cssVar('--vscode-descriptionForeground', '#9d9d9d');
+            var grid = cssVar('--vscode-editorWidget-border', 'rgba(128,128,128,.25)');
+            var lineColor = palette(2);
+            var barColor = palette(0);
+            var mono = cssVar('--vscode-editor-font-family', 'monospace');
+            var n = rows.length;
+            var xOf = function (idx) {
+              return padL + (n === 1 ? plotW / 2 : (idx * plotW) / (n - 1));
+            };
 
+            // 纵轴固定 0 → 最大值：累计量从 0 起，5 条网格 + 单位化标签
+            var maxV = 0;
+            for (var r = 0; r < n; r++) maxV = Math.max(maxV, Math.abs(rows[r]));
+            if (maxV <= 0) maxV = 1;
+            var yOf = function (v) {
+              return padT + curveH - (v / maxV) * curveH;
+            };
+
+            ctx.font = '10px ' + mono;
+            ctx.strokeStyle = grid;
             ctx.fillStyle = fg;
-            ctx.font = '11px ' + cssVar('--vscode-editor-font-family', 'monospace');
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (var s = 0; s <= 4; s++) {
+              var val = (maxV * s) / 4;
+              var y = yOf(val);
+              ctx.beginPath();
+              ctx.moveTo(padL, y);
+              ctx.lineTo(padL + plotW, y);
+              ctx.stroke();
+              ctx.fillText(formatAmount(val), padL - 6, y);
+            }
+
+            // 横轴：只抽样 5 个分时刻度，不再逐点标号；点数少时跳过重复下标
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            var lastIdx = -1;
+            for (var t = 0; t <= 4; t++) {
+              var idx = Math.round((t * (n - 1)) / 4);
+              if (idx === lastIdx) continue;
+              lastIdx = idx;
+              ctx.fillText(minuteLabel(idx), xOf(idx), padT + plotH + 4);
+            }
+
+            // 累计曲线 + 半透明面积
+            ctx.beginPath();
+            ctx.moveTo(xOf(0), yOf(rows[0]));
+            for (var q = 1; q < n; q++) ctx.lineTo(xOf(q), yOf(rows[q]));
+            ctx.lineTo(xOf(n - 1), padT + curveH);
+            ctx.lineTo(xOf(0), padT + curveH);
+            ctx.closePath();
+            ctx.fillStyle = lineColor;
+            ctx.globalAlpha = 0.12;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.beginPath();
+            ctx.moveTo(xOf(0), yOf(rows[0]));
+            for (var p = 1; p < n; p++) ctx.lineTo(xOf(p), yOf(rows[p]));
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+
+            // 每分钟增量 = 累计值差分；细柱不带任何文字，负值按 0 处理
+            if (barH > 0 && n > 1) {
+              var maxD = 0;
+              var deltas = [];
+              for (var d = 1; d < n; d++) {
+                var dv = rows[d] - rows[d - 1];
+                if (!isFinite(dv) || dv < 0) dv = 0;
+                deltas.push(dv);
+                maxD = Math.max(maxD, dv);
+              }
+              if (maxD <= 0) maxD = 1;
+              var slot = plotW / deltas.length;
+              var baseY = padT + plotH;
+              ctx.fillStyle = barColor;
+              ctx.globalAlpha = 0.55;
+              for (var b = 0; b < deltas.length; b++) {
+                var bh = (deltas[b] / maxD) * barH;
+                ctx.fillRect(padL + b * slot, baseY - bh, Math.max(1, slot - 1), bh);
+              }
+              ctx.globalAlpha = 1;
+              ctx.strokeStyle = grid;
+              ctx.beginPath();
+              ctx.moveTo(padL, baseY - barH - 4);
+              ctx.lineTo(padL + plotW, baseY - barH - 4);
+              ctx.stroke();
+            }
+
+            // 图例：日期 + 最新累计额 + 增量说明（共 2 条文字）
+            ctx.font = '11px ' + mono;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
-            ctx.fillText('分层累计分布（升序）' + (tm ? ' · ' + tm : ''), padL, 4);
-
-            ctx.font = '10px ' + cssVar('--vscode-editor-font-family', 'monospace');
-            for (var j = 0; j < rows.length; j++) {
-              var v = rows[j];
-              var len = Math.max(2, (Math.abs(v) / maxAbs) * plotW);
-              var y = padT + j * rowH + Math.min(4, rowH * 0.2);
-              var barH = Math.max(6, rowH - Math.min(8, rowH * 0.4));
-              ctx.fillStyle = palette(j);
-              ctx.fillRect(padL, y, len, barH);
-              // 档位标号 + 数值
+            ctx.fillStyle = lineColor;
+            ctx.fillRect(padL, 8, 12, 3);
+            ctx.fillStyle = fg;
+            ctx.fillText(
+              '累计成交额 ' + formatAmount(rows[n - 1]) +
+                (data && data.tm ? ' · ' + data.tm : ''),
+              padL + 16,
+              4
+            );
+            if (barH > 0) {
+              ctx.fillStyle = barColor;
+              ctx.fillRect(padL + 240, 8, 12, 3);
               ctx.fillStyle = fg;
-              ctx.textBaseline = 'middle';
-              ctx.textAlign = 'right';
-              ctx.fillText('L' + (j + 1), padL - 6, y + barH / 2);
-              ctx.textAlign = 'left';
-              ctx.fillText(Number(v).toFixed(2), padL + len + 6, y + barH / 2);
+              ctx.fillText('每分钟增量', padL + 256, 4);
             }
           });
         }
@@ -604,8 +776,19 @@
           var box = $('chartEmpty');
           var wrap = $('chartWrap');
           var lqWrap = $('lqWrap');
+          var collisionWrap = $('collisionWrap');
 
-          // 第 4 tab 走 DOM 表格，不进入 canvas 绘制路径
+          // 第 4/5 tab 走 DOM 表格，不进入 canvas 绘制路径
+          if (currentTab === 'collision') {
+            wrap.style.display = 'none';
+            box.style.display = 'none';
+            lqWrap.style.display = 'none';
+            collisionWrap.style.display = 'block';
+            renderCollision();
+            return;
+          }
+          collisionWrap.style.display = 'none';
+
           if (currentTab === 'lq') {
             wrap.style.display = 'none';
             box.style.display = 'none';
@@ -759,10 +942,99 @@
           box.innerHTML = html;
         }
 
+        /* ================= 右侧「数据碰撞」 ================= */
+        /** 6 档窗口 chips（元数据由宿主 init 下发，与左侧 8 档互不影响） */
+        function renderCollisionBars() {
+          var html = '';
+          for (var j = 0; j < COLLISION_DAY_META.length; j++) {
+            var d = COLLISION_DAY_META[j];
+            html +=
+              '<button type="button" class="lq-chip' +
+              (d.num === currentCollisionDays ? ' active' : '') +
+              '" data-days="' + d.num + '">' + esc(d.name) + '</button>';
+          }
+          $('collisionDays').innerHTML = html;
+        }
+
+        /** 结果表：只显示命中 ≥2 的股票，策略标签列在最后 */
+        function renderCollision() {
+          renderCollisionBars();
+          var box = $('collisionBody');
+          var summary = $('collisionSummary');
+
+          if (collision === undefined || collision === null) {
+            summary.textContent = '';
+            box.innerHTML = '<div class="collision-placeholder">碰撞计算中…</div>';
+            return;
+          }
+          if (collision.unlogged) {
+            summary.textContent = '';
+            box.innerHTML =
+              '<div class="collision-placeholder">数据碰撞需授权「量价掘金」读取<br>' +
+              '<button class="btn" id="collisionLoginBtn" style="margin-top:8px">微信扫码登录</button></div>';
+            $('collisionLoginBtn').addEventListener('click', function () {
+              vscode.postMessage({ command: 'openLogin' });
+            });
+            return;
+          }
+          if (collision.failed) {
+            summary.textContent = '已取 0/' + collision.total;
+            box.innerHTML =
+              '<div class="collision-placeholder retriable" id="collisionRetry">数据加载失败，点击重试</div>';
+            $('collisionRetry').addEventListener('click', function () {
+              vscode.postMessage({ command: 'refreshCollision' });
+            });
+            return;
+          }
+
+          var rows = collision.rows || [];
+          var available = typeof collision.available === 'number' ? collision.available : 0;
+          var total = typeof collision.total === 'number' ? collision.total : 0;
+          var daysName = '近' + currentCollisionDays + '天';
+          summary.textContent =
+            '命中≥2 共 ' + rows.length + ' 只 · 已取 ' + available + '/' + total + ' · ' + daysName;
+
+          if (!rows.length) {
+            box.innerHTML =
+              '<div class="collision-placeholder">' + esc(daysName) +
+              '没有命中 ≥2 个策略的股票</div>';
+            return;
+          }
+
+          var html =
+            '<table class="collision-table"><thead><tr><th>代码</th><th>名称</th>' +
+            '<th>命中</th><th>标签</th><th></th></tr></thead><tbody>';
+          for (var r = 0; r < rows.length; r++) {
+            var row = rows[r];
+            var tags = '';
+            var list = row.tags || [];
+            for (var t = 0; t < list.length; t++) {
+              tags += '<span class="lq-hit-tag">' + esc(list[t]) + '</span>';
+            }
+            html +=
+              '<tr><td>' + esc(row.code) + '</td><td>' + esc(row.name) + '</td>' +
+              '<td>' + esc(row.hits) + '</td><td>' + tags + '</td>' +
+              '<td><button type="button" class="lq-row-btn" data-code="' +
+              esc(row.code) + '">资金动态</button></td></tr>';
+          }
+          html += '</tbody></table>';
+          box.innerHTML = html;
+        }
+
         /* ================= 消息 ================= */
         window.addEventListener('message', function (event) {
           var msg = event.data;
-          if (!msg || msg.type !== 'init' || !msg.data || !msg.data.tab) return;
+          if (!msg || !msg.data) return;
+
+          // 碰撞数据走独立消息：失败/重试都不牵动左侧策略表格
+          if (msg.type === 'collision') {
+            collision = msg.data;
+            if (typeof msg.data.days === 'number') currentCollisionDays = msg.data.days;
+            renderCollision();
+            return;
+          }
+
+          if (msg.type !== 'init' || !msg.data.tab) return;
           var data = msg.data;
 
           currentTab = data.tab;
@@ -771,6 +1043,8 @@
           lqUnlogged = data.lqUnlogged === true;
           if (Array.isArray(data.lqTags)) LQ_TAG_META = data.lqTags;
           if (Array.isArray(data.lqDays)) LQ_DAY_META = data.lqDays;
+          if (Array.isArray(data.lqCollisionDays)) COLLISION_DAY_META = data.lqCollisionDays;
+          if (typeof data.collisionDays === 'number') currentCollisionDays = data.collisionDays;
 
           // 仅更新本次推送对应 tab 的缓存，其他 tab 缓存保留（避免覆盖已取数据）
           if (data.tab === 'cjl') cache.cjl = data.cjl;
@@ -786,6 +1060,9 @@
           $('updatedAt').textContent = ts ? '更新于 ' + new Date(ts).toLocaleTimeString() : '';
           setStatus('');
           render();
+
+          // 进入/刷新「数据碰撞」tab 才向宿主索取数据；宿主命中 30min 缓存时不发网络请求
+          if (data.tab === 'collision') vscode.postMessage({ command: 'requestCollision' });
         });
 
         /* ================= 交互 ================= */
@@ -794,6 +1071,7 @@
           tabNorth: 'north',
           tabIndex: 'index',
           tabLq: 'lq',
+          tabCollision: 'collision',
         };
         for (var tid in TAB_IDS) {
           (function (id) {
@@ -832,9 +1110,22 @@
           if (code) vscode.postMessage({ command: 'openStock', code: code });
         });
 
-        // 布局变化重画当前图表 tab（策略选股是 DOM 表格，无需重画）
+        // 右侧碰撞：切档与结果行点击委托（innerHTML 重建不影响委托）
+        $('collisionDays').addEventListener('click', function (e) {
+          var days = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-days') : null;
+          if (!days) return;
+          currentCollisionDays = Number(days);
+          renderCollisionBars();
+          vscode.postMessage({ command: 'selectCollisionDays', days: Number(days) });
+        });
+        $('collisionBody').addEventListener('click', function (e) {
+          var code = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-code') : null;
+          if (code) vscode.postMessage({ command: 'openStock', code: code });
+        });
+
+        // 布局变化重画当前图表 tab（策略选股/数据碰撞是 DOM 表格，无需重画）
         window.addEventListener('resize', function () {
-          if (currentTab === 'lq') return;
+          if (currentTab === 'lq' || currentTab === 'collision') return;
           render();
         });
 

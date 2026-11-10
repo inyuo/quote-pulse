@@ -9,16 +9,10 @@ import LonghubangPage from './longhubang';
 import DazhongPage from './dazhong';
 import rongziPage from './rongzi';
 import gaoguanPage from './gaoguan';
-import xinguPage from './xingu';
-import xinguriliPage from './xingurili';
-import zengfaPage from './zengfa';
-import peiguPage from './peigu';
 import reportPage from './report';
 import economyPage from './economy';
 import bkzjPage from './dashboard/bk';
-import OtherPage from './other';
 import AIConfigPage from './ai-config';
-import StockNewsPage from './stock-news';
 import StockWindVanePage from './stock-wind-vane';
 
 const { Content, Sider } = Layout;
@@ -74,9 +68,6 @@ export default function DataCenter({ children }: { children: ReactElement }) {
               height: 'calc(100vh - 86px)',
             }}
           >
-            <Menu.Item key="stock-news">
-              <Link to="/data-center/stock-news">韭研公社个股新闻</Link>
-            </Menu.Item>
             <Menu.Item key="stock-wind-vane">
               <Link to="/data-center/stock-wind-vane">选股风向标</Link>
             </Menu.Item>
@@ -99,20 +90,6 @@ export default function DataCenter({ children }: { children: ReactElement }) {
               <Link to="/data-center/gaoguan">高管持股</Link>
             </Menu.Item>
 
-            <Menu.SubMenu title="新股数据">
-              <Menu.Item key="xingu">
-                <Link to="/data-center/xingu">新股申购</Link>
-              </Menu.Item>
-              <Menu.Item key="xingurili">
-                <Link to="/data-center/xingurili">新股日历</Link>
-              </Menu.Item>
-              <Menu.Item key="zengfa">
-                <Link to="/data-center/zengfa">增发</Link>
-              </Menu.Item>
-              <Menu.Item key="peigu">
-                <Link to="/data-center/peigu">配股</Link>
-              </Menu.Item>
-            </Menu.SubMenu>
             <Menu.Item key="report">
               <Link to="/data-center/report">研报中心</Link>
             </Menu.Item>
@@ -122,13 +99,10 @@ export default function DataCenter({ children }: { children: ReactElement }) {
             <Menu.Item key="ai-config">
               <Link to="/data-center/ai-config">AI配置</Link>
             </Menu.Item>
-            <Menu.Item key="other">
-              <Link to="/data-center/other">欢迎PR</Link>
-            </Menu.Item>
           </Menu>
         </Sider>
         <Content
-          id="flashNewsContent"
+          id="dataCenterContent"
           style={{
             height: 'calc(100vh - 86px)',
             position: 'fixed',
@@ -157,20 +131,10 @@ export default function DataCenter({ children }: { children: ReactElement }) {
             <Route exact path="/data-center/dazhong" component={DazhongPage} />
             <Route exact path="/data-center/rongzi" component={rongziPage} />
             <Route exact path="/data-center/gaoguan" component={gaoguanPage} />
-            <Route exact path="/data-center/xingu" component={xinguPage} />
-            <Route
-              exact
-              path="/data-center/xingurili"
-              component={xinguriliPage}
-            />
-            <Route exact path="/data-center/zengfa" component={zengfaPage} />
-            <Route exact path="/data-center/peigu" component={peiguPage} />
             <Route exact path="/data-center/report" component={reportPage} />
             <Route exact path="/data-center/economy" component={economyPage} />
-            <Route exact path="/data-center/stock-news" component={StockNewsPage} />
             <Route exact path="/data-center/stock-wind-vane" component={StockWindVanePage} />
             <Route exact path="/data-center/ai-config" component={AIConfigPage} />
-            <Route exact path="/data-center/other" component={OtherPage} />
             <Redirect from="/data-center" to="/data-center/nxfxb"></Redirect>
           </Switch>
         </Content>

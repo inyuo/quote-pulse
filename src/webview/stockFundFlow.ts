@@ -1,8 +1,9 @@
-import { ViewColumn, workspace } from 'vscode';
+import { commands, ViewColumn, workspace } from 'vscode';
 import ReusedWebviewPanel from './ReusedWebviewPanel';
 import { getTemplateFileContent } from '../shared/utils';
 import { loadStockFundRows, loadIndustryRows, loadStockDetail } from '../shared/fundFlowData';
 import { LjgxStorage } from '../shared/ljgxData';
+import { LeekFundConfig } from '../shared/leekConfig';
 
 const VIEW_TYPE = 'leek-fund.stockFundFlow';
 const TITLE = '资金动态';
@@ -12,6 +13,14 @@ function errMsg(e: any): string {
   if (!e) return String(e);
   if (typeof e === 'string') return e;
   return e.message || e.code || String(e);
+}
+
+/**
+ * 是否支持跳「股票实时走势」：与 stockTrend.canOpenFundFlow 同一规则，
+ * 仅沪深 A 股个股（排除上证/深证指数与港美股）。
+ */
+function canOpenTrend(code: string): boolean {
+  return /^(sh|sz)\d{6}$/.test(code) && !/^(sh000|sz399)/.test(code);
 }
 
 /**
@@ -71,6 +80,7 @@ async function pushInit(panel: any, initialCode?: string): Promise<void> {
         stocks: pair[0],
         industry: pair[1],
         total: codes.length,
+        watchlist: codes,
         initialCode: typeof initialCode === 'string' ? initialCode : '',
         updatedAt: new Date().toISOString(),
       },
@@ -120,6 +130,42 @@ function handleMessage(panel: any, message: any): void {
         void pushDetail(panel, message.code);
       }
       break;
+    // 顶栏「加入自选」→ 复用配置层写入 leek-fund.stocks，再刷新 Stock 树与本页面
+    case 'addStock': {
+      const code = typeof message.code === 'string' ? message.code.toLowerCase() : '';
+      // 只接受沪深 6 位代码；已在自选里则不重复写（updateStockCfg 也会去重）
+      if (!/^(sh|sz)\d{6}$/.test(code)) break;
+      if (readWatchlist().indexOf(code) >= 0) break;
+      try {
+        LeekFundConfig.updateStockCfg(code, () => {
+          void commands.executeCommand('leek-fund.refreshStock');
+          void pushInit(panel);
+        });
+      } catch (e) {
+        console.error('[资金动态] 加入自选失败', errMsg(e));
+      }
+      break;
+    }
+    // 顶栏「实时走势」→ 复用树节点命令打开股票实时走势面板（走势页已有反向入口）
+    case 'openTrend': {
+      const code = typeof message.code === 'string' ? message.code.toLowerCase() : '';
+      if (!canOpenTrend(code)) break;
+      const name = typeof message.name === 'string' ? message.name : '';
+      // stockItemClick(code, name, text, stockCode) → stockTrend(code, name, stockCode)：
+      // 首参为 '0'+6 位代码（走势页用 substr(1) 取 6 位），末参保留 sh/sz 前缀供 market 判断
+      try {
+        void commands.executeCommand(
+          'leek-fund.stockItemClick',
+          '0' + code.substring(2),
+          name,
+          '',
+          code
+        );
+      } catch (e) {
+        console.error('[资金动态] 打开实时走势失败', errMsg(e));
+      }
+      break;
+    }
     default:
       break;
   }
