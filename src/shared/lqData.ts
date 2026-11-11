@@ -1,9 +1,9 @@
 /**
  * 量价掘金「策略选股」数据层（官网 pages/lq/lq，2026-11-04 实测契约）。
  *
- * 9 类策略共用 POST /shares.get_lq {tag, days}：
- * 无 token 返回 {state:false, code:1018} —— 必须登录，故复用 ljgxPostAuth
- * 的统一降级层（1018 清会话、网络/HTTP/业务失败一律 null，绝不抛异常）。
+ * 9 类策略共用 POST /shares.get_lq {tag, days}：需登录，统一由服务端
+ * qp-data-service 代发（ljgxPostAuth）；服务端不可用时返回 null，插件不再
+ * 保存本地会话。数据碰撞已改由服务端预计算，本模块保留元数据与纯函数给面板用。
  *
  * 返回 data 是两级分组：{ list:[{title, list:[{code,...}]}], hyTags, tsTags }。
  * 具体行字段以登录后真机响应为准，这里做防御式归一化：任何缺失都收敛成空值，
@@ -195,8 +195,8 @@ function safeDays(days: number): number {
 }
 
 /**
- * 拉取指定策略榜单。deps 传 {store, axios}（生产只传 store，测试注入 axios）。
- * 失败（未登录 / 1018 / 网络 / 业务）一律返回 null，由 UI 渲染登录引导或失败占位。
+ * 拉取指定策略榜单：统一由服务端代发（deps.post 可注入）。
+ * 服务端不可用 / 网络 / 业务失败一律返回 null，由调用方显示空态。
  */
 export async function fetchLqList(
   tag: string,

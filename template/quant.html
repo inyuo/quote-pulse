@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>量价掘金</title>
+    <title>量化面板</title>
     <style>
       * {
         box-sizing: border-box;
@@ -122,14 +122,7 @@
         margin-top: 8px;
       }
 
-      /* ---------- 策略选股（第 4 tab，DOM 表格） ---------- */
-      .lq-wrap {
-        flex: 1 1 auto;
-        min-height: 0;
-        overflow: auto;
-        padding: 8px 12px 16px;
-        display: none;
-      }
+      /* ---------- 公共 chips（天数 / 标签筛选） ---------- */
       .lq-bar {
         display: flex;
         flex-wrap: wrap;
@@ -151,44 +144,8 @@
         border-color: var(--vscode-focusBorder, #007acc);
         background: var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.18));
       }
-      .lq-links {
-        color: var(--vscode-descriptionForeground, #999);
-        font-size: 11px;
-        margin-bottom: 8px;
-      }
-      .lq-links span {
-        margin-right: 8px;
-      }
-      .lq-group {
-        margin-bottom: 14px;
-      }
-      .lq-group-title {
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 0;
-        border-bottom: 1px solid var(--vscode-panel-border, #444);
-      }
-      .lq-group-title .count {
-        color: var(--vscode-descriptionForeground, #999);
-        font-weight: 400;
-      }
-      .lq-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-      .lq-table th {
-        text-align: left;
-        font-weight: 400;
-        color: var(--vscode-descriptionForeground, #999);
-        padding: 4px 6px;
-      }
-      .lq-table td {
-        padding: 4px 6px;
-        border-bottom: 1px solid var(--vscode-panel-border, rgba(68, 68, 68, 0.4));
-      }
-      .lq-table tr:hover {
-        background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.05));
+      .lq-chip.zero {
+        opacity: 0.5;
       }
       .lq-row-btn {
         cursor: pointer;
@@ -199,22 +156,30 @@
         font-size: 12px;
         padding: 0;
       }
-      .lq-up {
-        color: var(--vscode-charts-red, #f14c4c);
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
       }
-      .lq-down {
-        color: var(--vscode-charts-green, #4ec9b0);
+      .filter-input {
+        flex: 0 1 220px;
+        max-width: 100%;
+        border: 1px solid var(--vscode-panel-border, #444);
+        background: var(--vscode-input-background, transparent);
+        color: var(--vscode-input-foreground, #ccc);
+        font-family: inherit;
+        font-size: 12px;
+        border-radius: 3px;
+        padding: 4px 8px;
       }
-      .lq-placeholder {
-        padding: 24px 0;
-        text-align: center;
+      .filter-hint {
         color: var(--vscode-descriptionForeground, #999);
-      }
-      .lq-placeholder.retriable {
-        cursor: pointer;
+        font-size: 11px;
       }
 
-      /* ---------- 数据碰撞（第 5 个顶层 tab） ---------- */
+      /* ---------- 数据碰撞（第 4 个顶层 tab：DOM 表格 + 标签筛选） ---------- */
       .collision-wrap {
         flex: 1 1 auto;
         min-height: 0;
@@ -244,6 +209,10 @@
         color: var(--vscode-descriptionForeground, #999);
         padding: 4px 6px;
       }
+      .collision-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+      }
       .collision-table td {
         padding: 4px 6px;
         border-bottom: 1px solid var(--vscode-panel-border, rgba(68, 68, 68, 0.4));
@@ -261,19 +230,35 @@
         border: 1px solid var(--vscode-panel-border, #444);
         color: var(--vscode-descriptionForeground, #999);
       }
+      .lq-hit-tag.filterable {
+        cursor: pointer;
+      }
+      .lq-hit-tag.filterable:hover {
+        border-color: var(--vscode-focusBorder, #007acc);
+        color: var(--vscode-editor-foreground, #ccc);
+      }
+      .lq-hit-tag.selected {
+        border-color: var(--vscode-focusBorder, #007acc);
+        background: var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.18));
+        color: var(--vscode-editor-foreground, #ccc);
+      }
       .collision-placeholder {
         padding: 18px 0;
         text-align: center;
         color: var(--vscode-descriptionForeground, #999);
+        line-height: 1.9;
       }
       .collision-placeholder.retriable {
         cursor: pointer;
+      }
+      .collision-placeholder .btn {
+        margin-top: 8px;
       }
     </style>
   </head>
   <body>
     <div class="topbar">
-      <h1>量价掘金</h1>
+      <h1>量化面板</h1>
       <span class="meta" id="updatedAt"></span>
       <span class="status" id="status"></span>
       <span class="spacer"></span>
@@ -284,7 +269,6 @@
       <button class="tab" id="tabCjl" data-tab="cjl">量价分层</button>
       <button class="tab" id="tabNorth" data-tab="north">北向资金</button>
       <button class="tab" id="tabIndex" data-tab="index">大盘指数</button>
-      <button class="tab" id="tabLq" data-tab="lq">策略选股</button>
       <button class="tab" id="tabCollision" data-tab="collision">数据碰撞</button>
     </div>
 
@@ -293,16 +277,15 @@
     </div>
     <div id="chartEmpty" class="empty" style="display: none">数据加载中…</div>
 
-    <div class="lq-wrap" id="lqWrap">
-      <div class="lq-bar" id="lqTags"></div>
-      <div class="lq-bar" id="lqDays"></div>
-      <div class="lq-links" id="lqTsTags"></div>
-      <div id="lqGroups"></div>
-    </div>
-
     <div class="collision-wrap" id="collisionWrap">
       <div class="collision-title">数据碰撞 <span id="collisionSummary"></span></div>
       <div class="lq-bar" id="collisionDays"></div>
+      <div class="lq-bar" id="collisionTagBar"></div>
+      <div class="filter-bar">
+        <input class="filter-input" id="collisionSearch" type="text" placeholder="搜索代码 / 名称" />
+        <button type="button" class="lq-chip" id="collisionClear">清空筛选</button>
+        <span class="filter-hint" id="collisionFilterHint">点标签叠加筛选（同时命中），点击「命中」列可排序</span>
+      </div>
       <div id="collisionBody"></div>
     </div>
 
@@ -315,23 +298,19 @@
         /** 当前 tab（首帧 init 的 data.tab 决定，懒加载：宿主只推当前 tab 数据） */
         var currentTab = 'north';
         /**
-         * 各 tab 数据缓存：undefined = 未拉取（切换后推 null，null = 拉取失败/空），
-         * 有值 = 已拉取对象。仅更新本次 init 对应 tab，其他 tab 缓存保留。
+         * 各 tab 数据缓存：undefined = 未拉取，null = 拉取失败/空，有值 = 已拉取。
+         * 仅更新本次 init 对应 tab，其他 tab 缓存保留。
          */
-        var cache = { cjl: undefined, north: undefined, index: undefined, lq: undefined };
-        /** 量价分层 tab 是否未登录（宿主随 cjl 推送下发，引导复用 quantLogin 面板） */
-        var cjlUnlogged = false;
-        /** 策略选股 tab 是否未登录（同一会话，宿主随 lq 推送下发） */
-        var lqUnlogged = false;
-        /** 策略/天数元数据由宿主 init 下发（单一数据源：shared/lqData） */
-        var LQ_TAG_META = [];
-        var LQ_DAY_META = [];
-        var currentLqTag = 'ztb';
-        var currentLqDays = 1;
-        /** 右侧数据碰撞：6 档窗口元数据、当前窗口、最近一次碰撞结果（undefined=未收到） */
+        var cache = { cjl: undefined, north: undefined, index: undefined };
+        /** 数据碰撞：窗口/标签元数据、当前窗口、最近一次结果（undefined=未收到） */
         var COLLISION_DAY_META = [];
+        var COLLISION_TAG_META = [];
         var currentCollisionDays = 5;
         var collision = undefined;
+        /** 标签筛选状态：多选按「同时命中」，搜索匹配代码/名称，命中数默认降序 */
+        var selectedTags = [];
+        var searchText = '';
+        var sortDesc = true;
 
         var PAL_VARS = [
           ['--vscode-charts-red', '#f14c4c'],
@@ -367,8 +346,8 @@
         }
 
         function updateTabs() {
-          var keys = ['cjl', 'north', 'index', 'lq', 'collision'];
-          var ids = ['tabCjl', 'tabNorth', 'tabIndex', 'tabLq', 'tabCollision'];
+          var keys = ['cjl', 'north', 'index', 'collision'];
+          var ids = ['tabCjl', 'tabNorth', 'tabIndex', 'tabCollision'];
           for (var i = 0; i < keys.length; i++) {
             $(ids[i]).className = 'tab' + (keys[i] === currentTab ? ' active' : '');
           }
@@ -775,44 +754,20 @@
 
           var box = $('chartEmpty');
           var wrap = $('chartWrap');
-          var lqWrap = $('lqWrap');
           var collisionWrap = $('collisionWrap');
 
-          // 第 4/5 tab 走 DOM 表格，不进入 canvas 绘制路径
+          // 数据碰撞是 DOM 表格，不进入 canvas 绘制路径
           if (currentTab === 'collision') {
             wrap.style.display = 'none';
             box.style.display = 'none';
-            lqWrap.style.display = 'none';
             collisionWrap.style.display = 'block';
             renderCollision();
             return;
           }
           collisionWrap.style.display = 'none';
 
-          if (currentTab === 'lq') {
-            wrap.style.display = 'none';
-            box.style.display = 'none';
-            lqWrap.style.display = 'block';
-            renderLq();
-            return;
-          }
-          lqWrap.style.display = 'none';
-
+          // 服务端未配置 / 接口失败一律空态，不再展示授权引导
           var data = cache[currentTab];
-
-          // 未登录引导（仅 cjl tab）：按钮换起 quantLogin 登录面板
-          if (currentTab === 'cjl' && cjlUnlogged) {
-            wrap.style.display = 'none';
-            box.style.display = 'inline-flex';
-            box.innerHTML =
-              '<div class="guide">量价分层数据需授权「量价掘金」读取\n' +
-              '<button class="btn" id="loginBtn">微信扫码登录</button></div>';
-            $('loginBtn').addEventListener('click', function () {
-              vscode.postMessage({ command: 'openLogin' });
-            });
-            return;
-          }
-
           if (data === undefined || data === null) {
             wrap.style.display = 'none';
             box.style.display = 'inline-flex';
@@ -833,7 +788,7 @@
           else if (currentTab === 'index') drawIndex(data);
         }
 
-        /* ================= 策略选股（第 4 tab） ================= */
+        /* ================= 数据碰撞：文本转义与标签筛选 ================= */
         /** 第三方文本进 innerHTML 前转义，避免注入 */
         function esc(text) {
           return String(text === undefined || text === null ? '' : text)
@@ -844,106 +799,89 @@
             .replace(/'/g, '&#39;');
         }
 
-        function percentCell(percent) {
-          if (percent === null || percent === undefined || !isFinite(percent)) return '<td>-</td>';
-          var cls = percent >= 0 ? 'lq-up' : 'lq-down';
-          var sign = percent >= 0 ? '+' : '';
-          return '<td class="' + cls + '">' + sign + Number(percent).toFixed(2) + '%</td>';
+        /** 标签切换：多选按「同时命中」逐步收窄，再次点击取消 */
+        function toggleTag(label) {
+          if (!label) return;
+          var i = selectedTags.indexOf(label);
+          if (i === -1) selectedTags.push(label);
+          else selectedTags.splice(i, 1);
+          render();
         }
 
-        /** 策略 chips 与天数 chips（元数据由宿主 init 下发） */
-        function renderLqBars() {
-          var tagHtml = '';
-          for (var i = 0; i < LQ_TAG_META.length; i++) {
-            var t = LQ_TAG_META[i];
-            tagHtml +=
-              '<button type="button" class="lq-chip' +
-              (t.tag === currentLqTag ? ' active' : '') +
-              '" data-tag="' + esc(t.tag) + '">' + esc(t.label) + '</button>';
-          }
-          $('lqTags').innerHTML = tagHtml;
-
-          var dayHtml = '';
-          for (var j = 0; j < LQ_DAY_META.length; j++) {
-            var d = LQ_DAY_META[j];
-            dayHtml +=
-              '<button type="button" class="lq-chip' +
-              (d.num === currentLqDays ? ' active' : '') +
-              '" data-days="' + d.num + '">' + esc(d.name) + '</button>';
-          }
-          $('lqDays').innerHTML = dayHtml;
+        /** 一键清空标签与关键字（Esc / 清空按钮 / 无匹配占位共用） */
+        function clearFilters() {
+          selectedTags = [];
+          searchText = '';
+          $('collisionSearch').value = '';
+          render();
         }
 
-        /** 两级分组表格：未登录/加载中/失败/空数据各有占位 */
-        function renderLq() {
-          renderLqBars();
-          var data = cache.lq;
-          var box = $('lqGroups');
-
-          if (lqUnlogged) {
-            $('lqTsTags').innerHTML = '';
-            box.innerHTML =
-              '<div class="lq-placeholder">策略选股数据需授权「量价掘金」读取<br>' +
-              '<button class="btn" id="lqLoginBtn" style="margin-top:8px">微信扫码登录</button></div>';
-            $('lqLoginBtn').addEventListener('click', function () {
-              vscode.postMessage({ command: 'openLogin' });
-            });
-            return;
-          }
-
-          if (data === undefined) {
-            $('lqTsTags').innerHTML = '';
-            box.innerHTML = '<div class="lq-placeholder">数据加载中…</div>';
-            return;
-          }
-          if (data === null) {
-            $('lqTsTags').innerHTML = '';
-            box.innerHTML =
-              '<div class="lq-placeholder retriable" id="lqRetry">数据加载失败，点击重试</div>';
-            $('lqRetry').addEventListener('click', function () {
-              vscode.postMessage({ command: 'refresh' });
-            });
-            return;
-          }
-
-          var links = '';
-          var ts = data.tsTags || [];
-          for (var k = 0; k < ts.length; k++) {
-            if (ts[k] && ts[k].doc) links += '<span>' + esc(ts[k].doc) + '</span>';
-          }
-          $('lqTsTags').innerHTML = links;
-
-          var groups = data.groups || [];
-          if (!groups.length) {
-            box.innerHTML = '<div class="lq-placeholder">暂无数据</div>';
-            return;
-          }
-
-          var html = '';
-          for (var g = 0; g < groups.length; g++) {
-            var group = groups[g];
-            var rows = group.rows || [];
-            html +=
-              '<div class="lq-group"><div class="lq-group-title">' +
-              esc(group.title || '未命名分组') +
-              ' <span class="count">' + rows.length + ' 只</span></div>' +
-              '<table class="lq-table"><thead><tr><th>代码</th><th>名称</th><th>涨跌幅</th>' +
-              '<th>说明</th><th></th></tr></thead><tbody>';
-            for (var r = 0; r < rows.length; r++) {
-              var row = rows[r];
-              html +=
-                '<tr><td>' + esc(row.code) + '</td><td>' + esc(row.name) + '</td>' +
-                percentCell(row.percent) + '<td>' + esc(row.note) + '</td>' +
-                '<td><button type="button" class="lq-row-btn" data-code="' +
-                esc(row.code) + '">资金动态</button></td></tr>';
+        /** 结果集按标签（AND）、代码/名称关键字过滤，再按命中数排序 */
+        function filteredRows(rows) {
+          var out = [];
+          var kw = searchText.toLowerCase();
+          for (var i = 0; i < rows.length; i++) {
+            var row = rows[i] || {};
+            var tags = row.tags || [];
+            var matchTag = true;
+            for (var s = 0; s < selectedTags.length; s++) {
+              if (tags.indexOf(selectedTags[s]) === -1) {
+                matchTag = false;
+                break;
+              }
             }
-            html += '</tbody></table></div>';
+            if (!matchTag) continue;
+            if (kw) {
+              var text = (String(row.code || '') + ' ' + String(row.name || '')).toLowerCase();
+              if (text.indexOf(kw) === -1) continue;
+            }
+            out.push(row);
           }
-          box.innerHTML = html;
+          out.sort(function (a, b) {
+            var ha = Number(a.hits) || 0;
+            var hb = Number(b.hits) || 0;
+            var diff = sortDesc ? hb - ha : ha - hb;
+            if (diff) return diff;
+            var ca = String(a.code || '');
+            var cb = String(b.code || '');
+            return ca < cb ? -1 : ca > cb ? 1 : 0;
+          });
+          return out;
         }
 
-        /* ================= 右侧「数据碰撞」 ================= */
-        /** 6 档窗口 chips（元数据由宿主 init 下发，与左侧 8 档互不影响） */
+        /** 标签 chips：条数基于完整结果，0 条置灰；「全部」清空所有标签 */
+        function renderCollisionTags(rows) {
+          var labels = COLLISION_TAG_META.slice();
+          for (var r = 0; r < rows.length; r++) {
+            var list = (rows[r] && rows[r].tags) || [];
+            for (var t = 0; t < list.length; t++) {
+              if (list[t] && labels.indexOf(list[t]) === -1) labels.push(list[t]);
+            }
+          }
+          var counts = {};
+          for (var i = 0; i < labels.length; i++) {
+            var c = 0;
+            for (var j = 0; j < rows.length; j++) {
+              if (((rows[j] && rows[j].tags) || []).indexOf(labels[i]) !== -1) c++;
+            }
+            counts[labels[i]] = c;
+          }
+          var html =
+            '<button type="button" class="lq-chip' + (selectedTags.length ? '' : ' active') +
+            '" data-filter-all="1">全部 ' + rows.length + '</button>';
+          for (var k = 0; k < labels.length; k++) {
+            var label = labels[k];
+            html +=
+              '<button type="button" class="lq-chip' +
+              (selectedTags.indexOf(label) !== -1 ? ' active' : '') +
+              (counts[label] ? '' : ' zero') +
+              '" data-filter-tag="' + esc(label) + '">' + esc(label) + ' ' + counts[label] + '</button>';
+          }
+          $('collisionTagBar').innerHTML = html;
+        }
+
+        /* ================= 数据碰撞 ================= */
+        /** 6 档窗口 chips（元数据由宿主 init 下发） */
         function renderCollisionBars() {
           var html = '';
           for (var j = 0; j < COLLISION_DAY_META.length; j++) {
@@ -956,34 +894,28 @@
           $('collisionDays').innerHTML = html;
         }
 
-        /** 结果表：只显示命中 ≥2 的股票，策略标签列在最后 */
+        /** 结果表：服务端快照 + 本地标签/关键字筛选，服务不可用一律空态 */
         function renderCollision() {
           renderCollisionBars();
           var box = $('collisionBody');
           var summary = $('collisionSummary');
+          var hint = $('collisionFilterHint');
 
           if (collision === undefined || collision === null) {
             summary.textContent = '';
+            hint.textContent = '';
+            renderCollisionTags([]);
             box.innerHTML = '<div class="collision-placeholder">碰撞计算中…</div>';
             return;
           }
-          if (collision.unlogged) {
+          if (collision.unavailable) {
             summary.textContent = '';
+            hint.textContent = '';
+            renderCollisionTags([]);
             box.innerHTML =
-              '<div class="collision-placeholder">数据碰撞需授权「量价掘金」读取<br>' +
-              '<button class="btn" id="collisionLoginBtn" style="margin-top:8px">微信扫码登录</button></div>';
-            $('collisionLoginBtn').addEventListener('click', function () {
-              vscode.postMessage({ command: 'openLogin' });
-            });
-            return;
-          }
-          if (collision.failed) {
-            summary.textContent = '已取 0/' + collision.total;
-            box.innerHTML =
-              '<div class="collision-placeholder retriable" id="collisionRetry">数据加载失败，点击重试</div>';
-            $('collisionRetry').addEventListener('click', function () {
-              vscode.postMessage({ command: 'refreshCollision' });
-            });
+              '<div class="collision-placeholder">数据服务暂不可用<br>' +
+              '请配置 leek-fund.dataApiBaseUrl / leek-fund.dataApiKey 后重试<br>' +
+              '<button type="button" class="btn" data-action="retry">重试</button></div>';
             return;
           }
 
@@ -991,8 +923,17 @@
           var available = typeof collision.available === 'number' ? collision.available : 0;
           var total = typeof collision.total === 'number' ? collision.total : 0;
           var daysName = '近' + currentCollisionDays + '天';
+          var shown = filteredRows(rows);
+
+          renderCollisionTags(rows);
+          hint.textContent = selectedTags.length
+            ? '已选 ' + selectedTags.length + ' 个标签（同时命中）· Esc 清空'
+            : '点标签叠加筛选（同时命中），点击「命中」列可排序';
           summary.textContent =
-            '命中≥2 共 ' + rows.length + ' 只 · 已取 ' + available + '/' + total + ' · ' + daysName;
+            '命中≥2 共 ' + rows.length + ' 只' +
+            (shown.length !== rows.length ? ' · 筛选后 ' + shown.length + ' 只' : '') +
+            ' · 已取 ' + available + '/' + total + ' · ' + daysName +
+            (collision.dataDate ? ' · ' + collision.dataDate : '');
 
           if (!rows.length) {
             box.innerHTML =
@@ -1000,16 +941,27 @@
               '没有命中 ≥2 个策略的股票</div>';
             return;
           }
+          if (!shown.length) {
+            box.innerHTML =
+              '<div class="collision-placeholder">没有符合筛选条件的股票<br>' +
+              '<button type="button" class="btn" data-action="clear">清空筛选</button></div>';
+            return;
+          }
 
           var html =
             '<table class="collision-table"><thead><tr><th>代码</th><th>名称</th>' +
-            '<th>命中</th><th>标签</th><th></th></tr></thead><tbody>';
-          for (var r = 0; r < rows.length; r++) {
-            var row = rows[r];
+            '<th class="sortable" data-sort="hits">命中 ' + (sortDesc ? '▼' : '▲') + '</th>' +
+            '<th>标签</th><th></th></tr></thead><tbody>';
+          for (var r = 0; r < shown.length; r++) {
+            var row = shown[r];
             var tags = '';
             var list = row.tags || [];
             for (var t = 0; t < list.length; t++) {
-              tags += '<span class="lq-hit-tag">' + esc(list[t]) + '</span>';
+              var label = String(list[t]);
+              tags +=
+                '<span class="lq-hit-tag filterable' +
+                (selectedTags.indexOf(label) !== -1 ? ' selected' : '') +
+                '" data-filter-tag="' + esc(label) + '">' + esc(label) + '</span>';
             }
             html +=
               '<tr><td>' + esc(row.code) + '</td><td>' + esc(row.name) + '</td>' +
@@ -1026,7 +978,7 @@
           var msg = event.data;
           if (!msg || !msg.data) return;
 
-          // 碰撞数据走独立消息：失败/重试都不牵动左侧策略表格
+          // 碰撞数据走独立消息：筛选状态保留，仅刷新结果
           if (msg.type === 'collision') {
             collision = msg.data;
             if (typeof msg.data.days === 'number') currentCollisionDays = msg.data.days;
@@ -1038,30 +990,21 @@
           var data = msg.data;
 
           currentTab = data.tab;
-          // cjl 推送携带登录标记，供未登录引导区分显示
-          cjlUnlogged = data.cjlUnlogged === true;
-          lqUnlogged = data.lqUnlogged === true;
-          if (Array.isArray(data.lqTags)) LQ_TAG_META = data.lqTags;
-          if (Array.isArray(data.lqDays)) LQ_DAY_META = data.lqDays;
-          if (Array.isArray(data.lqCollisionDays)) COLLISION_DAY_META = data.lqCollisionDays;
+          if (Array.isArray(data.collisionDayMeta)) COLLISION_DAY_META = data.collisionDayMeta;
+          if (Array.isArray(data.collisionTags)) COLLISION_TAG_META = data.collisionTags;
           if (typeof data.collisionDays === 'number') currentCollisionDays = data.collisionDays;
 
           // 仅更新本次推送对应 tab 的缓存，其他 tab 缓存保留（避免覆盖已取数据）
           if (data.tab === 'cjl') cache.cjl = data.cjl;
           else if (data.tab === 'north') cache.north = data.north;
           else if (data.tab === 'index') cache.index = data.index;
-          else if (data.tab === 'lq') {
-            cache.lq = data.lq;
-            if (data.lq && data.lq.tag) currentLqTag = data.lq.tag;
-            if (data.lq && data.lq.days) currentLqDays = data.lq.days;
-          }
 
           var ts = data.updatedAt;
           $('updatedAt').textContent = ts ? '更新于 ' + new Date(ts).toLocaleTimeString() : '';
           setStatus('');
           render();
 
-          // 进入/刷新「数据碰撞」tab 才向宿主索取数据；宿主命中 30min 缓存时不发网络请求
+          // 进入/刷新「数据碰撞」tab 才向宿主索取数据；宿主命中缓存时不发网络请求
           if (data.tab === 'collision') vscode.postMessage({ command: 'requestCollision' });
         });
 
@@ -1070,7 +1013,6 @@
           tabCjl: 'cjl',
           tabNorth: 'north',
           tabIndex: 'index',
-          tabLq: 'lq',
           tabCollision: 'collision',
         };
         for (var tid in TAB_IDS) {
@@ -1096,21 +1038,7 @@
           }
         });
 
-        // 策略选股：三个容器各绑一次点击委托（innerHTML 重建不影响委托）
-        $('lqTags').addEventListener('click', function (e) {
-          var tag = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-tag') : null;
-          if (tag) vscode.postMessage({ command: 'selectLqTag', tag: tag });
-        });
-        $('lqDays').addEventListener('click', function (e) {
-          var days = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-days') : null;
-          if (days) vscode.postMessage({ command: 'selectLqDays', days: Number(days) });
-        });
-        $('lqGroups').addEventListener('click', function (e) {
-          var code = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-code') : null;
-          if (code) vscode.postMessage({ command: 'openStock', code: code });
-        });
-
-        // 右侧碰撞：切档与结果行点击委托（innerHTML 重建不影响委托）
+        // 碰撞窗口切档（筛选状态保留，等新快照回来再重绘）
         $('collisionDays').addEventListener('click', function (e) {
           var days = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-days') : null;
           if (!days) return;
@@ -1118,14 +1046,66 @@
           renderCollisionBars();
           vscode.postMessage({ command: 'selectCollisionDays', days: Number(days) });
         });
+
+        // 标签 chips：「全部」清空，其余切换（innerHTML 重建不影响委托）
+        $('collisionTagBar').addEventListener('click', function (e) {
+          var target = e && e.target;
+          if (!target || !target.getAttribute) return;
+          if (target.getAttribute('data-filter-all')) {
+            if (selectedTags.length) {
+              selectedTags = [];
+              render();
+            }
+            return;
+          }
+          toggleTag(target.getAttribute('data-filter-tag'));
+        });
+
+        // 关键字搜索：纯本地过滤，不发网络请求
+        $('collisionSearch').addEventListener('input', function (e) {
+          var value = e && e.target && e.target.value;
+          searchText = typeof value === 'string' ? value.trim() : '';
+          render();
+        });
+        $('collisionClear').addEventListener('click', clearFilters);
+
+        // 结果区统一委托：标签 / 排序 / 清空 / 重试 / 打开个股
         $('collisionBody').addEventListener('click', function (e) {
-          var code = e && e.target && e.target.getAttribute ? e.target.getAttribute('data-code') : null;
+          var target = e && e.target;
+          if (!target || !target.getAttribute) return;
+          var get = function (key) { return target.getAttribute(key); };
+          var action = get('data-action');
+          if (action === 'retry') {
+            vscode.postMessage({ command: 'refreshCollision' });
+            return;
+          }
+          if (action === 'clear') {
+            clearFilters();
+            return;
+          }
+          if (get('data-sort')) {
+            sortDesc = !sortDesc;
+            render();
+            return;
+          }
+          var label = get('data-filter-tag');
+          if (label) {
+            toggleTag(label);
+            return;
+          }
+          var code = get('data-code');
           if (code) vscode.postMessage({ command: 'openStock', code: code });
         });
 
-        // 布局变化重画当前图表 tab（策略选股/数据碰撞是 DOM 表格，无需重画）
+        // Esc 一键清空标签与关键字
+        window.addEventListener('keydown', function (e) {
+          var isEsc = e && (e.key === 'Escape' || e.keyCode === 27);
+          if (isEsc && (selectedTags.length || searchText)) clearFilters();
+        });
+
+        // 布局变化重画当前图表 tab（数据碰撞是 DOM 表格，无需重画）
         window.addEventListener('resize', function () {
-          if (currentTab === 'lq' || currentTab === 'collision') return;
+          if (currentTab === 'collision') return;
           render();
         });
 

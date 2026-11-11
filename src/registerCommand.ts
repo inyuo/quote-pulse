@@ -27,13 +27,11 @@ import { FundProvider } from './explorer/fundProvider';
 import FundService from './explorer/fundService';
 import { NewsProvider } from './explorer/newsProvider';
 import { resolveNewsSourceUrl } from './explorer/xxjwxcNews';
-import { QuantProvider, registerQuantProviderForRefresh } from './explorer/quantProvider';
 import { StockProvider } from './explorer/stockProvider';
 import StockService from './explorer/stockService';
 import globalState from './globalState';
 import { LeekFundConfig } from './shared/leekConfig';
 import { LeekTreeItem } from './shared/leekTreeItem';
-import { createVscodeStorage } from './shared/ljgxData';
 // import checkForUpdate from './shared/update';
 import { colorOptionList, randomColor } from './shared/utils';
 import allFundTrend from './webview/allFundTrend';
@@ -276,16 +274,14 @@ export function registerViewEvent(
   // 资金动态（个股资金三块表格 / 分时资金流 / 行业资金流）
   context.subscriptions.push(
     commands.registerCommand('leek-fund.viewStockFundFlow', () => {
-      const { initStockFundFlow, stockFundFlow } = require('./webview/stockFundFlow');
-      // 三块表格走需登录态的 analy.get_sp，开面板前注入会话存储
-      initStockFundFlow(createVscodeStorage(context.globalState));
+      const { stockFundFlow } = require('./webview/stockFundFlow');
+      // 三块表格的 analy.get_sp 由服务端代发，无需本地会话
       stockFundFlow();
     })
   );
   context.subscriptions.push(
     commands.registerCommand('leek-fund.stockFundFlowForStock', (target) => {
-      const { initStockFundFlow, stockFundFlow } = require('./webview/stockFundFlow');
-      initStockFundFlow(createVscodeStorage(context.globalState));
+      const { stockFundFlow } = require('./webview/stockFundFlow');
       const code = (target && (target.id || (target.info && target.info.code))) || '';
       stockFundFlow(typeof code === 'string' ? code : '');
     })
@@ -327,10 +323,8 @@ export function registerViewEvent(
     commands.registerCommand('leek-fund.aiStockAnalysis', async (target) => {
       const { StockNewsView } = require('./webview/stock-news-view');
       const stockNewsView = StockNewsView.getInstance();
-      // 资金动态三块表格走需登录态的 analy.get_sp；登录态资讯源同理，注入会话存储
-      const result = await stockNewsView.send_ai_stock_analysis(target, {
-        store: createVscodeStorage(context.globalState),
-      });
+      // 资金表格与资讯源均由服务端代发，无需注入本地会话
+      const result = await stockNewsView.send_ai_stock_analysis(target);
       if (result !== '') {
         // 控制台输出 - 限制长度避免控制台截断
         // const consoleResult = result.length > 2000 ? result.substring(0, 2000) + '...（内容过长，完整结果请查看OUTPUT面板或Webview）' : result;
@@ -930,49 +924,21 @@ export function registerViewEvent(
 }
 
 /**
- * 量价掘金（量化面板）命令注册：
- * - quantLogin / quantOpen 懒加载登录面板与 5-tab 量化面板；
- * - refreshQuant 重新校验会话并重绘（暗盘榜单已于 2026-11-04 移除）；
- * - 启动时静默校验会话（不 await，完成后自动重绘）。
+ * 量化面板命令注册：入口在 Settings 分栏的 viewsWelcome 链接。
+ * 面板 4 个 tab：cjl 量价分层 / north 北向资金 / index 大盘指数 / collision 数据碰撞。
+ * 需登录的数据由服务端代发，插件不再扫码登录。
  */
-export function registerQuant(context: ExtensionContext, quantProvider: QuantProvider) {
-  // Task 6：记录 provider 引用，登录面板登录成功后回调 refreshQuantTree() 重绘
-  registerQuantProviderForRefresh(quantProvider);
-
-  context.subscriptions.push(
-    commands.registerCommand('leek-fund.quantLogin', () => {
-      /* Task 6 接入：懒加载登录面板；存储引用在命令内注入（与 Task 5 扩展侧同源） */
-      const { initQuantLogin, quantLogin } = require('./webview/quantLogin');
-      initQuantLogin(createVscodeStorage(context.globalState));
-      quantLogin();
-    })
-  );
+export function registerQuant(context: ExtensionContext) {
   context.subscriptions.push(
     commands.registerCommand('leek-fund.quantOpen', (target) => {
-      /* 量化面板（tab：cjl 量价分层 / north 北向 / index 大盘 / lq 策略选股 / collision 数据碰撞）。
-         登录存储引用在开面板前注入 —— 面板未登录引导的 openLogin 会直接打开登录面板 */
-      const { initQuantLogin } = require('./webview/quantLogin');
-      const { initQuantPanel, quantPanel } = require('./webview/quantPanel');
-      initQuantLogin(createVscodeStorage(context.globalState));
-      initQuantPanel(createVscodeStorage(context.globalState));
-      const VALID_TABS = ['cjl', 'north', 'index', 'lq', 'collision'];
-      const tab =
-        target && VALID_TABS.indexOf(target.tab) !== -1 ? target.tab : 'north';
-      // code 可选：预留个股量价分层查询（tab==='cjl' 时替代默认指数集合）
-      const code =
-        target && typeof target.code === 'string' ? target.code : undefined;
-      // tag 可选：tab==='lq' 时定位到某一类策略（面板内部校验合法性）
-      const tag = target && typeof target.tag === 'string' ? target.tag : undefined;
-      quantPanel(tab, code, tag);
+      const { quantPanel } = require('./webview/quantPanel');
+      const VALID_TABS = ['cjl', 'north', 'index', 'collision'];
+      const tab = target && VALID_TABS.indexOf(target.tab) !== -1 ? target.tab : 'north';
+      // code 可选：tab==='cjl' 时替代默认指数集合
+      const code = target && typeof target.code === 'string' ? target.code : undefined;
+      quantPanel(tab, code);
     })
   );
-  context.subscriptions.push(
-    commands.registerCommand('leek-fund.refreshQuant', () => {
-      quantProvider.refreshData();
-    })
-  );
-
-  quantProvider.preload();
 }
 
 export function registerCommandPaletteEvent(context: ExtensionContext, statusbar: StatusBar) {

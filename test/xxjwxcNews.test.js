@@ -115,7 +115,7 @@ describe('xxjwxc 资讯拉取（axios 注入）', () => {
     return { post: async () => ({ status: 200, data }) };
   }
 
-  it('fetchXxjFlash 解析 hejjw 载荷并带 user-token', async () => {
+  it('fetchXxjFlash 解析 hejjw 载荷，且不再携带本地会话凭据', async () => {
     let captured = null;
     const axios = {
       post: async (url, body, config) => {
@@ -126,7 +126,7 @@ describe('xxjwxc 资讯拉取（axios 注入）', () => {
     const items = await fetchXxjFlash({ store: makeStore(SESSION), axios });
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].content, '快讯A');
-    assert.strictEqual(captured.config.headers['user-token'], 'tok');
+    assert.strictEqual(captured.config.headers['user-token'], undefined, '插件不再保存/发送 user-token');
     assert.ok(captured.url.includes('shares.get_hejjw'));
   });
 

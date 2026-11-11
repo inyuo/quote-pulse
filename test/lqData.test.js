@@ -1,8 +1,8 @@
 /**
  * 量价掘金「策略选股」数据层测试（lqData）。
  *
- * 官网 9 类策略共用 POST /shares.get_lq {tag, days}，需登录（无 token 返回 1018）。
- * 这里用内存 store + 注入的 axios 假对象验证：元数据、载荷归一化、请求契约与降级。
+ * 9 类策略共用 POST /shares.get_lq {tag, days}，现由服务端 qp-data-service
+ * 代发；这里用 deps.post 注入验证请求契约与降级，元数据/归一化/碰撞为纯函数。
  */
 const assert = require('assert');
 const {
@@ -15,35 +15,6 @@ const {
   fetchLqList,
   collideLqResults,
 } = require('../out/shared/lqData');
-
-const SESSION_KEY = 'leek-fund.ljgxSession';
-
-function memStore(session) {
-  const m = new Map();
-  if (session) m.set(SESSION_KEY, session);
-  return {
-    get: (key) => m.get(key),
-    update: (key, value) => {
-      m.set(key, value);
-      return Promise.resolve();
-    },
-    _m: m,
-  };
-}
-
-const SESSION = {
-  sessionId: 'wx_sess_abc',
-  openId: 'oX8s1',
-  overdueTime: 1762249200,
-  userName: '股海浮沉',
-  avatarUrl: '',
-  did: 'LEEK_k3x9p2_ab12cd',
-};
-
-/** 成功响应包装（与官网 {state,error,data} 一致） */
-function ok(data) {
-  return { status: 200, data: { state: true, error: 'normal', data } };
-}
 
 describe('策略元数据 LQ_TAGS / LQ_DAYS', () => {
   it('9 类策略 tag 与顺序与官网 lq 参数一致', () => {
@@ -144,58 +115,38 @@ describe('策略载荷归一化 normalizeLqGroups', () => {
   });
 });
 
-describe('策略榜单拉取 fetchLqList', () => {
-  it('带 user-token 请求 /shares.get_lq，body 为 {tag, days}，返回归一化结果', async () => {
+describe('策略榜单拉取 fetchLqList（服务端代发）', () => {
+  it('注入 post → 请求 shares.get_lq，body 为 {tag, days}，返回归一化结果', async () => {
     let captured = null;
-    const axios = {
-      post: async (url, body, config) => {
-        captured = { url, body, config };
-        return ok({
-          list: [{ title: '涨停板', list: [{ code: '000001', name: '平安银行' }] }],
-        });
+    const result = await fetchLqList('ztb', 3, {
+      post: async (path, body) => {
+        captured = { path, body };
+        return { list: [{ title: '涨停板', list: [{ code: '000001', name: '平安银行' }] }] };
       },
-    };
+    });
 
-    const result = await fetchLqList('ztb', 3, { store: memStore(SESSION), axios });
-    assert.ok(captured, '应发出请求');
-    assert.ok(captured.url.endsWith('/shares.get_lq'), `实际路径 ${captured.url}`);
-    assert.deepStrictEqual(captured.body, { tag: 'ztb', days: 3 });
-    assert.strictEqual(captured.config.headers['user-token'], 'wx_sess_abc');
+    assert.deepStrictEqual(captured, { path: 'shares.get_lq', body: { tag: 'ztb', days: 3 } });
     assert.strictEqual(result.groups[0].rows[0].name, '平安银行');
+    assert.strictEqual(result.groups[0].rows[0].code, 'sz000001');
   });
 
-  it('未登录不发请求，返回 null', async () => {
-    let calls = 0;
-    const result = await fetchLqList('cd', 1, {
-      store: memStore(null),
-      axios: { post: async () => { calls += 1; return ok({ list: [] }); } },
+  it('非法 tag/days 收敛到默认值，不把脏参数发给服务端', async () => {
+    let body = null;
+    await fetchLqList('not-a-tag', 999, {
+      post: async (path, b) => {
+        body = b;
+        return { list: [] };
+      },
     });
-    assert.strictEqual(result, null);
-    assert.strictEqual(calls, 0);
+    assert.deepStrictEqual(body, { tag: 'ztb', days: 1 });
   });
 
-  it('1018 会话失效 → 清库并返回 null', async () => {
-    const store = memStore(SESSION);
-    const result = await fetchLqList('cd', 1, {
-      store,
-      axios: { post: async () => ({ status: 200, data: { state: false, code: 1018 } }) },
-    });
-    assert.strictEqual(result, null);
-    assert.strictEqual(store._m.get(SESSION_KEY), undefined, '应清除会话');
-  });
-
-  it('网络异常 / 业务失败返回 null 不抛错', async () => {
-    const store = memStore(SESSION);
-    const boom = await fetchLqList('cd', 1, {
-      store,
-      axios: { post: async () => { throw new Error('boom'); } },
-    });
-    const bad = await fetchLqList('cd', 1, {
-      store,
-      axios: { post: async () => ({ status: 200, data: { state: false, code: 1001 } }) },
-    });
-    assert.strictEqual(boom, null);
-    assert.strictEqual(bad, null);
+  it('服务端不可用 / 代发抛错 → 返回 null 不抛异常', async () => {
+    assert.strictEqual(await fetchLqList('cd', 1, { post: async () => null }), null);
+    assert.strictEqual(
+      await fetchLqList('cd', 1, { post: async () => { throw new Error('boom'); } }),
+      null
+    );
   });
 });
 

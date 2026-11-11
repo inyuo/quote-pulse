@@ -1,16 +1,14 @@
 /**
- * xxjwxc 官网资讯源（登录后资讯切换）。
+ * xxjwxc 官网资讯源（由服务端代发）。
  *
  * 官网 webshares 的「资讯」内容由两个接口组成（2026-11-04 实测契约）：
- * - POST /shares.get_hejjw  7×24 快讯流 [{tmStr:"14:20", content:"..."}]，需登录
- * - POST /shares.get_xzw    新闻资讯 [{tmStr, title, content}]，需登录（title 可能为空）
- * 无 token 响应 {state:false, code:1018}。
+ * - POST /shares.get_hejjw  7×24 快讯流 [{tmStr:"14:20", content:"..."}]
+ * - POST /shares.get_xzw    新闻资讯 [{tmStr, title, content}]（title 可能为空）
  *
- * 与全站数据层惯例一致：失败一律返回空数组/降级值，绝不抛异常，
- * console.error 只打 message。登录态经 LjgxStorage 注入，测试可替换。
+ * 2026-11-11 起插件不再扫码登录：需登录的接口统一由服务端 qp-data-service
+ * 代发，未配置服务端时返回空数组。失败一律降级、绝不抛异常。
  */
-import axios from 'axios';
-import { createVscodeStorage, loadSession, LjgxSession, LjgxStorage } from '../shared/ljgxData';
+import { postLjgx as postViaDataApi, isEnabled as isDataApiEnabled } from '../shared/dataApiClient';
 import { JYGNewsItem } from './jygNews';
 
 const XXJ_API_BASE = 'https://www.xxjwxc.cn/shares/api/v1';
@@ -99,38 +97,34 @@ function errMsg(e: any): string {
   return e.message || e.code || String(e);
 }
 
-/** 登录态判定：store 可注入（测试）；无注入且无 vscode context 时按未登录处理 */
-export function hasXxjSession(deps?: { store?: LjgxStorage }): boolean {
-  try {
-    const store =
-      (deps && deps.store) ||
-      (globalStateContextMemento ? createVscodeStorage(globalStateContextMemento) : null);
-    if (!store) return false;
-    const session = loadSession(store);
-    return !!(session && session.sessionId);
-  } catch (e) {
-    console.error('[资讯] 读取 xxjwxc 登录态失败', errMsg(e));
-    return false;
+/**
+ * 资讯源是否可用：生产等同于「服务端数据接口已配置」。
+ * deps.store 仅用于兼容历史单测的显式注入，生产不会传入。
+ */
+export function hasXxjSession(deps?: { store?: any }): boolean {
+  if (deps && deps.store) {
+    try {
+      const s = deps.store.get && deps.store.get('leek-fund.ljgxSession');
+      return !!(s && s.sessionId);
+    } catch (e) {
+      return false;
+    }
   }
+  return isDataApiEnabled();
 }
 
-/** globalState.context 由 extension.ts 在 activate 时赋值；测试环境为 undefined */
-let globalStateContextMemento: LjgxStorage | null = null;
-
-/** 生产侧注册 storage（extension.ts activate 时调用一次） */
-export function initXxjNewsStorage(store: LjgxStorage): void {
-  globalStateContextMemento = store;
-}
-
-/** 带 user-token 的 POST 封装：失败返回 null（不抛错），1018 同样按空数据处理 */
+/** 资讯 POST：生产走服务端代发；deps.axios 为历史单测注入的假客户端 */
 async function xxjNewsPost(
   path: string,
   body: Record<string, any>,
-  session: LjgxSession,
   deps?: { axios?: any }
 ): Promise<any | null> {
+  if (!(deps && deps.axios)) {
+    if (!isDataApiEnabled()) return null;
+    return postViaDataApi(path, body);
+  }
   try {
-    const client = (deps && deps.axios) || axios;
+    const client = deps.axios;
     const res = await client.post(
       `${XXJ_API_BASE}${path}`,
       body,
@@ -141,7 +135,6 @@ async function xxjNewsPost(
           Referer: 'https://www.xxjwxc.cn/webshares/',
           'User-Agent': DEFAULT_UA,
           Accept: 'application/json, text/plain, */*',
-          'user-token': session.sessionId,
         },
         timeout: XXJ_TIMEOUT,
         validateStatus: () => true,
@@ -164,10 +157,9 @@ async function xxjNewsPost(
 }
 
 /** 拉取 7×24 快讯流（原始条目，未合并） */
-export async function fetchXxjFlash(deps?: { store?: LjgxStorage; axios?: any }): Promise<XxjRawNewsItem[]> {
-  const session = resolveSession(deps);
-  if (!session) return [];
-  const data = await xxjNewsPost('/shares.get_hejjw', {}, session, deps);
+export async function fetchXxjFlash(deps?: { store?: any; axios?: any }): Promise<XxjRawNewsItem[]> {
+  if (!hasXxjSession(deps)) return [];
+  const data = await xxjNewsPost('/shares.get_hejjw', {}, deps);
   const list = data && data.list;
   if (!Array.isArray(list)) return [];
   return list.filter(
@@ -176,24 +168,12 @@ export async function fetchXxjFlash(deps?: { store?: LjgxStorage; axios?: any })
 }
 
 /** 拉取新闻资讯（原始条目，未合并） */
-export async function fetchXxjNews(deps?: { store?: LjgxStorage; axios?: any }): Promise<XxjRawNewsItem[]> {
-  const session = resolveSession(deps);
-  if (!session) return [];
-  const data = await xxjNewsPost('/shares.get_xzw', {}, session, deps);
+export async function fetchXxjNews(deps?: { store?: any; axios?: any }): Promise<XxjRawNewsItem[]> {
+  if (!hasXxjSession(deps)) return [];
+  const data = await xxjNewsPost('/shares.get_xzw', {}, deps);
   const list = data && data.list;
   if (!Array.isArray(list)) return [];
   return list.filter((item: any) => item && typeof item.tmStr === 'string');
-}
-
-function resolveSession(deps?: { store?: LjgxStorage }): LjgxSession | null {
-  try {
-    const store =
-      (deps && deps.store) ||
-      (globalStateContextMemento ? createVscodeStorage(globalStateContextMemento) : null);
-    return store ? loadSession(store) : null;
-  } catch (e) {
-    return null;
-  }
 }
 
 /** "14:20" → 今日该时刻的毫秒时间戳（解析失败返回 0，仅用于排序） */
@@ -272,13 +252,12 @@ export interface NewsSourceGroup {
  */
 export async function fetchXxjSource(
   key: string,
-  deps?: { store?: LjgxStorage; axios?: any }
+  deps?: { store?: any; axios?: any }
 ): Promise<XxjRawNewsItem[] | null> {
   const meta = NEWS_SOURCES.find((s) => s.key === key);
   if (!meta) return null;
-  const session = resolveSession(deps);
-  if (!session) return [];
-  const data = await xxjNewsPost(meta.endpoint, meta.body, session, deps);
+  if (!hasXxjSession(deps)) return [];
+  const data = await xxjNewsPost(meta.endpoint, meta.body, deps);
   if (!data || !Array.isArray(data.list)) return null;
   return data.list.filter(
     (item: any) => item && typeof item === 'object' && typeof item.tmStr === 'string'
@@ -327,12 +306,12 @@ export function buildXxjSourceGroups(results: any, limitPerGroup = 20): NewsSour
 }
 
 /**
- * 登录后为 AI 分析聚合四来源分类资讯（与「资讯」视图同源）。
- * 未登录直接返回 []（不发请求）；登录态经 deps 或全局 storage 解析。
+ * 为 AI 分析聚合四来源分类资讯（与「资讯」视图同源）。
+ * 服务端未配置时直接返回 []（不发请求）。
  */
 export async function fetchXxjNewsGroupsForAi(
   limitPerGroup = 8,
-  deps?: { store?: LjgxStorage; axios?: any }
+  deps?: { store?: any; axios?: any }
 ): Promise<NewsSourceGroup[]> {
   if (!hasXxjSession(deps)) return [];
   const results: Record<string, any> = {};
@@ -365,7 +344,6 @@ export function buildXxjNewsAppendix(groups: any): string {
 
 export default {
   hasXxjSession,
-  initXxjNewsStorage,
   fetchXxjFlash,
   fetchXxjNews,
   buildXxjNewsItems,

@@ -1,6 +1,6 @@
 /**
  * 个股资金三块表格（官网 add 页「资金动态」tab 的 spData）：
- * POST /analy.get_sp {code}，需 user-token；未登录 / 失败一律返回 []。
+ * POST /analy.get_sp {code} 由服务端代发；服务端不可用 / 失败一律返回 []。
  */
 const assert = require('assert');
 
@@ -38,29 +38,12 @@ const TABLES = [
   },
 ];
 
-/** 内存 LjgxStorage：session 落库与 1018 清库都可断言 */
-function makeStore(loggedIn) {
-  const map = new Map();
-  if (loggedIn) {
-    map.set('leek-fund.ljgxSession', { sessionId: 'test-session', openId: 'open-1' });
-  }
-  return {
-    get: (key) => map.get(key),
-    update: (key, value) => {
-      if (value === undefined) map.delete(key);
-      else map.set(key, value);
-      return Promise.resolve();
-    },
-    map,
-  };
-}
-
 function ok(data) {
   return { status: 200, data: { state: true, error: 'normal', data } };
 }
 
 describe('个股资金三块表格 stockFundTables', () => {
-  it('未登录不发请求，返回空数组', async () => {
+  it('服务端不可用时不直连第三方，返回空数组', async () => {
     let called = false;
     const client = {
       post: async () => {
@@ -70,38 +53,32 @@ describe('个股资金三块表格 stockFundTables', () => {
     };
 
     const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(false),
+      post: async () => null,
       axios: client,
     });
 
     assert.deepStrictEqual(out, []);
-    assert.strictEqual(called, false, '未登录不能打接口');
+    assert.strictEqual(called, false, '服务端不可用时不能直连第三方');
   });
 
-  it('已登录请求 /analy.get_sp，body 仅带 code，header 带 user-token', async () => {
+  it('服务端代发 analy.get_sp，body 仅带 code 且不携带本地会话', async () => {
     const calls = [];
-    const client = {
-      post: async (url, body, opts) => {
-        calls.push({ url, body, opts });
-        return ok({ list: TABLES });
+    const out = await tablesModule.fetchStockFundTables('sz000977', {
+      post: async (path, body) => {
+        calls.push({ path, body });
+        return { list: TABLES };
       },
-    };
-
-    await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(true),
-      axios: client,
     });
 
     assert.strictEqual(calls.length, 1);
-    assert.ok(calls[0].url.endsWith('/analy.get_sp'), `实际 URL：${calls[0].url}`);
+    assert.strictEqual(calls[0].path, 'analy.get_sp');
     assert.deepStrictEqual(calls[0].body, { code: 'sz000977' });
-    assert.strictEqual(calls[0].opts.headers['user-token'], 'test-session');
+    assert.strictEqual(out.length, 3, '应归一为三块表格');
   });
 
   it('归一为三块：标题 + 4 列表头 + 带颜色的行', async () => {
     const client = { post: async () => ok({ list: TABLES }) };
     const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(true),
       axios: client,
     });
 
@@ -149,7 +126,6 @@ describe('个股资金三块表格 stockFundTables', () => {
     const client = { post: async () => ok({ list }) };
 
     const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(true),
       axios: client,
     });
 
@@ -185,7 +161,6 @@ describe('个股资金三块表格 stockFundTables', () => {
         }),
     };
     const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(true),
       axios: client,
     });
 
@@ -209,26 +184,23 @@ describe('个股资金三块表格 stockFundTables', () => {
         }),
     };
     const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(true),
       axios: client,
     });
 
     assert.strictEqual(out[0].rows[0].color, '', '危险 color 应被丢弃');
   });
 
-  it('1018 会话失效：返回空数组并清除会话', async () => {
-    const store = makeStore(true);
-    const client = {
-      post: async () => ({ status: 200, data: { state: false, code: 1018, error: '缓存已过期' } }),
-    };
-
-    const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store,
-      axios: client,
-    });
-
-    assert.deepStrictEqual(out, []);
-    assert.strictEqual(store.map.has('leek-fund.ljgxSession'), false, '应清会话');
+  it('服务端返回空 / 代发抛错 → 空数组且不抛异常', async () => {
+    assert.deepStrictEqual(
+      await tablesModule.fetchStockFundTables('sz000977', { post: async () => null }),
+      []
+    );
+    assert.deepStrictEqual(
+      await tablesModule.fetchStockFundTables('sz000977', {
+        post: async () => { throw new Error('boom'); },
+      }),
+      []
+    );
   });
 
   it('网络异常返回空数组而不是抛错', async () => {
@@ -238,7 +210,6 @@ describe('个股资金三块表格 stockFundTables', () => {
       },
     };
     const out = await tablesModule.fetchStockFundTables('sz000977', {
-      store: makeStore(true),
       axios: client,
     });
     assert.deepStrictEqual(out, []);
@@ -253,7 +224,6 @@ describe('个股资金三块表格 stockFundTables', () => {
       },
     };
     const out = await tablesModule.fetchStockFundTables('', {
-      store: makeStore(true),
       axios: client,
     });
     assert.deepStrictEqual(out, []);

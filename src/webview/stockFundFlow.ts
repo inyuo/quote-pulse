@@ -2,7 +2,6 @@ import { commands, ViewColumn, workspace } from 'vscode';
 import ReusedWebviewPanel from './ReusedWebviewPanel';
 import { getTemplateFileContent } from '../shared/utils';
 import { loadStockFundRows, loadIndustryRows, loadStockDetail } from '../shared/fundFlowData';
-import { LjgxStorage } from '../shared/ljgxData';
 import { LeekFundConfig } from '../shared/leekConfig';
 
 const VIEW_TYPE = 'leek-fund.stockFundFlow';
@@ -36,16 +35,6 @@ const attached = new Set<string>();
  * 由前端在渲染列表时选中（支持"自选股右键 → 查看该股资金动态"直达）。
  */
 let pendingInitialCode = '';
-
-/**
- * 登录态存储：个股资金三块表格（analy.get_sp）需要 user-token。
- * 由命令注册处注入，与 initQuantPanel 同一来源（context.globalState）。
- */
-let panelStore: LjgxStorage | null = null;
-
-export function initStockFundFlow(store: LjgxStorage): void {
-  panelStore = store;
-}
 
 /** 自选股列表来自本地配置，不依赖任何外部接口 */
 function readWatchlist(): string[] {
@@ -92,7 +81,7 @@ async function pushInit(panel: any, initialCode?: string): Promise<void> {
 
 /** 推送选中股详情（分时曲线 + 所属板块 + 第三方分析 + 资金三块表格） */
 async function pushDetail(panel: any, code: string): Promise<void> {
-  const detail = await loadStockDetail(code, { store: panelStore || undefined }).catch((e) => {
+  const detail = await loadStockDetail(code).catch((e) => {
     console.error('[资金动态] 取个股详情失败', errMsg(e));
     return {
       code,

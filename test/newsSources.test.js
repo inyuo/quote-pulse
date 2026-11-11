@@ -91,7 +91,7 @@ describe('资讯来源元数据 NEWS_SOURCES', () => {
 });
 
 describe('四源拉取 fetchXxjSource', () => {
-  it('按元数据发 POST：URL、body、user-token', async () => {
+  it('按元数据发 POST：URL、body，且不携带本地会话凭据', async () => {
     const captured = [];
     const axios = {
       post: async (url, body, config) => {
@@ -107,7 +107,7 @@ describe('四源拉取 fetchXxjSource', () => {
     xxj.NEWS_SOURCES.forEach((meta, i) => {
       assert.ok(captured[i].url.includes(meta.endpoint.slice(1)), `${meta.key} URL`);
       assert.deepStrictEqual(captured[i].body, meta.body, `${meta.key} body`);
-      assert.strictEqual(captured[i].token, 'tok');
+      assert.strictEqual(captured[i].token, undefined, `${meta.key} 不应再发 user-token`);
     });
   });
 

@@ -60,7 +60,7 @@ function stockTrend(code: string, name: string, stockCode: string) {
     webview.__leekFundFlowBound = true;
     webview.onDidReceiveMessage((msg: any) => {
       if (msg && msg.command === 'openFundFlow' && msg.code) {
-        // 复用已注册的命令：它内部会注入登录态，资金动态的三块表格需要 user-token
+        // 复用已注册的命令：资金动态的三块表格由服务端代发
         commands.executeCommand('leek-fund.stockFundFlowForStock', { id: msg.code });
       }
     });

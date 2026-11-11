@@ -5,7 +5,7 @@ import axios from 'axios';
  *
  * 配置 leek-fund.dataApiBaseUrl 后，需登录的掘金请求与东财资金流请求
  * 改由服务端完成（多 sessionId 轮询 + 限速 + 按天快照）；配置为空或服务
- * 不可用时，调用方自动回退到原有直连链路。
+ * 不可用时调用方显示空态，插件不再扫码登录或直连兜底。
  */
 
 const TIMEOUT = 20000;
@@ -51,8 +51,9 @@ function requestHeaders(apiKey: string): Record<string, string> {
 export async function postLjgx(path: string, body: Record<string, any>): Promise<any> {
   const { baseUrl, apiKey } = settings();
   if (!baseUrl) return null;
+  const safePath = String(path || '').replace(/^\/+/, '');
   try {
-    const res = await axios.post(`${baseUrl}/api/v1/xxjwxc/${path}`, body, {
+    const res = await axios.post(`${baseUrl}/api/v1/xxjwxc/${safePath}`, body, {
       headers: requestHeaders(apiKey),
       timeout: TIMEOUT,
       validateStatus: () => true,
@@ -100,7 +101,14 @@ export async function getCollision(days: number, date?: string): Promise<any> {
       validateStatus: () => true,
     });
     if (!res || res.status >= 400 || !res.data || res.data.success !== true) return null;
-    return res.data.data;
+    const payload = res.data.data;
+    if (!payload || typeof payload !== 'object') return null;
+    // 快照日期/是否复用缓存随结果一起交给面板展示
+    return {
+      ...payload,
+      dataDate: typeof res.data.dataDate === 'string' ? res.data.dataDate : '',
+      stale: !!res.data.stale,
+    };
   } catch (e) {
     console.error('[数据服务] 碰撞结果获取失败', errMsg(e));
     return null;

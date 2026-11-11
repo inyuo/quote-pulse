@@ -44,7 +44,6 @@
     "onView:leekFundView.news",
     "onView:leekFundView.binance",
     "onView:leekFundView.forex",
-    "onView:leekFundView.quant",
     "onView:leekFundView.settings",
     "onCommand:leek-fund.toggleStatusBarIconVisibility"
   ],
@@ -82,10 +81,6 @@
           "id": "leekFundView.forex",
           "name": "Forex",
           "visibility": "hidden"
-        },
-        {
-          "id": "leekFundView.quant",
-          "name": "掘金"
         },
         {
           "id": "leekFundView.settings",
@@ -332,17 +327,8 @@
         "icon": "$(graph)"
       },
       {
-        "command": "leek-fund.quantLogin",
-        "title": "量价掘金: 微信扫码登录"
-      },
-      {
         "command": "leek-fund.quantOpen",
-        "title": "量价掘金: 打开量化面板"
-      },
-      {
-        "command": "leek-fund.refreshQuant",
-        "title": "量价掘金: 刷新数据",
-        "icon": "$(refresh)"
+        "title": "Leek: 量化面板"
       }
     ],
     "keybindings": [
@@ -442,11 +428,6 @@
         {
           "command": "leek-fund.refreshForex",
           "when": "view == leekFundView.forex",
-          "group": "navigation"
-        },
-        {
-          "command": "leek-fund.refreshQuant",
-          "when": "view == leekFundView.quant",
           "group": "navigation"
         }
       ],
@@ -631,7 +612,7 @@
         "leek-fund.dataApiBaseUrl": {
           "type": "string",
           "default": "",
-          "description": "数据服务地址（如 http://124.71.128.214:8800）。留空则使用插件本地直连与扫码登录"
+          "description": "数据服务地址（如 http://124.71.128.214:8800）。留空或服务不可用时，需登录的数据直接显示空态"
         },
         "leek-fund.dataApiKey": {
           "type": "string",
@@ -806,7 +787,7 @@
       },
       {
         "view": "leekFundView.settings",
-        "contents": "\n [🏠️ 行情中心](command:leek-fund.leekCenterView) \n [🤖️ AI助手配置](command:leek-fund.openAiConfig) \n [🎨个性定制](command:leek-fund.customSetting)"
+        "contents": "\n [🏠️ 行情中心](command:leek-fund.leekCenterView) \n [🤖️ AI助手配置](command:leek-fund.openAiConfig) \n [🎨个性定制](command:leek-fund.customSetting) \n [📊 量化面板](command:leek-fund.quantOpen)"
       }
     ]
   },

@@ -1,7 +1,6 @@
 /**
- * 资金动态宿主回归：三块表格走需登录态的 analy.get_sp，
- * 必须确认 initStockFundFlow 注入的 store 真的传到了 loadStockDetail，
- * 否则线上永远拿不到数据、右栏被当成「未登录」整块隐藏。
+ * 资金动态宿主回归：三块表格的 analy.get_sp 由服务端代发，
+ * 确认宿主不再注入本地会话，且 detail 消息仍携带 fundTables。
  */
 const assert = require('assert');
 const path = require('path');
@@ -54,27 +53,22 @@ describe('资金动态宿主 stockFundFlow', () => {
     configStub.reset();
   });
 
-  it('未注入 store 时详情取数的 deps.store 为 undefined', async () => {
+  it('详情取数不再注入本地会话存储（由服务端代发）', async () => {
     panel.fire({ command: 'select', code: 'sh600519' });
     await tick();
 
     const call = fundStub.calls.find((c) => c.code === 'sh600519');
     assert.ok(call, '应触发详情取数');
-    assert.ok(call.deps, '应传 deps');
-    assert.strictEqual(call.deps.store, undefined);
+    assert.ok(!call.deps || !call.deps.store, '插件不再保存/透传 store');
   });
 
-  it('initStockFundFlow 注入的 store 透传到详情取数，detail 消息带 fundTables', async () => {
-    const store = { get: () => undefined, update: () => Promise.resolve() };
-    host.initStockFundFlow(store);
-
+  it('select 个股 → detail 消息带 fundTables', async () => {
     const before = panel.webview.pushed.length;
     panel.fire({ command: 'select', code: 'sz000977' });
     await tick();
 
     const call = fundStub.calls.find((c) => c.code === 'sz000977');
     assert.ok(call, '应触发详情取数');
-    assert.strictEqual(call.deps.store, store, '登录态必须透传给 analy.get_sp');
 
     const detail = panel.webview.pushed.slice(before).find((m) => m.type === 'detail');
     assert.ok(detail, '应推送 detail 消息');

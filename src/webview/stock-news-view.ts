@@ -7,7 +7,7 @@ import {
   fetchXxjNewsGroupsForAi,
   buildXxjNewsAppendix,
 } from '../explorer/xxjwxcNews';
-import { LjgxStorage, fetchShareCjl } from '../shared/ljgxData';
+import { fetchShareCjl } from '../shared/ljgxData';
 import { loadStockDetail, loadIndustryRows } from '../shared/fundFlowData';
 import {
   AI_STOCK_SYSTEM_PROMPT,
@@ -76,7 +76,7 @@ export class StockNewsView {
     }
   }
 
-  async send_ai_stock_analysis(target: any, deps?: { store?: LjgxStorage }): Promise<string> {
+  async send_ai_stock_analysis(target: any): Promise<string> {
     if (!target?.info) {
       window.showErrorMessage('未获取到股票信息');
       return '';
@@ -132,7 +132,7 @@ export class StockNewsView {
     // 资金动态：复用窗口同一编排层，一次拿到报价 / 分时资金 / 板块 / 量化结论 / 三表
     const fundTask = (async () => {
       const pair = await Promise.all([
-        loadStockDetail(aiCode, { store: deps?.store }),
+        loadStockDetail(aiCode),
         loadIndustryRows(),
       ]);
       return buildFundFlowAppendixForAi(pair[0], pair[1]);
@@ -141,8 +141,8 @@ export class StockNewsView {
       return '';
     });
 
-    // 量价分层：分时累计成交额（登录接口，未登录返回 null）
-    const cjlTask = fetchShareCjl([aiCode], { store: deps?.store }).catch((e) => {
+    // 量价分层：分时累计成交额（服务端代发，不可用时返回 null）
+    const cjlTask = fetchShareCjl([aiCode]).catch((e) => {
       console.error('获取量价分层数据失败:', e);
       return null;
     });
