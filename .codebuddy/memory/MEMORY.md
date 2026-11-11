@@ -11,7 +11,7 @@
 - **网络**：本机 GitHub 直连不通，push 需 `https_proxy=http://127.0.0.1:7897`；Gitee 直连可用；服务器公网仅放行 `22/8888/6700/7863/5532/6699/8800`。
 - **自动推送**：每次代码变更后自动 commit + push（两个仓库都适用）。
 - **详细日志**：[2026-11-10](2026-11-10.md)（改动清单、关联关系处理、验证结果、待扫码事项）。
-- **项目内记忆文件本被 `.gitignore` 忽略**，按用户要求以 `git add -f` 纳入版本库。
+- **`.codebuddy/` 自 2026-11-11 起不再被 `.gitignore` 忽略**，整个目录（含历史日记 `2026-07-27.md` / `2026-08-01.md` / `2026-08-03.md`）纳入版本库，后续新增记忆文件直接 `git add` 即可。
 
 ## 项目：leek-fund-old（VS Code 扩展 LeekFund / 韭菜盒子）
 - 技术栈：TypeScript 扩展，`yarn` 管理；`src/` 为扩展主代码，`template-packages/leek-center` 为韭菜中心 React 前端（CRA，prepublish 时 build 到 `template/leek-center/build`）。

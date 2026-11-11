@@ -17,4 +17,4 @@ template-packages/leek-center/.eslintcache
 !template-packages/leek-center/yarn.lock
 
 .idea
-.codebuddy/
+# .codebuddy/ 为项目文件记忆（MEMORY.md + 按日期日志），纳入版本库，不要忽略
