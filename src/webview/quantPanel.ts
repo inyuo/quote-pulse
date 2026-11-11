@@ -13,7 +13,7 @@
  * - 宿主 → 模板：{type:'init', data:{tab, cjl, north, index, collisionDays,
  *   collisionDayMeta, collisionTags, updatedAt}}
  * - 宿主 → 模板：{type:'collision', data:{days, rows, available, total,
- *   unavailable, dataDate, updatedAt}}
+ *   unavailable, reason, httpStatus, dataDate, updatedAt}}
  * - 模板 → 宿主：ready / refresh / selectTab{tab} / requestCollision /
  *   selectCollisionDays{days} / refreshCollision / openStock{code}。
  *
@@ -119,26 +119,41 @@ async function pushInit(panel: any, tab: QuantTab): Promise<void> {
   }
 }
 
-/** 服务端碰撞结果结构校验：脏数据一律收敛成空态 */
-function normalizeCollision(payload: any): any {
-  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.rows)) return null;
+/** 宿主内部使用的碰撞结果（与 dataApiClient.CollisionResult 字段对齐） */
+type CollisionResultLike = {
+  ok: boolean;
+  reason?: string;
+  status?: number;
+  data?: any;
+};
+
+/** 服务端成功载荷结构校验：脏数据一律收敛成失败 */
+function normalizeCollision(result: CollisionResultLike): any {
+  if (!result || result.ok !== true || !result.data) return null;
+  const payload = result.data;
+  if (typeof payload !== 'object' || !Array.isArray(payload.rows)) return null;
   return payload;
 }
 
-/** 按窗口拉服务端快照：60s TTL 命中即复用，同档在途请求合并 */
-async function loadCollision(days: number): Promise<any> {
+/** 按窗口拉服务端快照：成功结果 60s TTL 复用、同档在途请求合并；失败不缓存 */
+async function loadCollision(days: number): Promise<CollisionResultLike> {
   const hit = collisionCache.get(days);
   if (hit && Date.now() - hit.time < COLLISION_TTL_MS) return hit.data;
 
   const flying = collisionInflight.get(days);
   if (flying) return flying;
 
-  const task = getCollision(days)
-    .catch(() => null)
-    .then((payload) => {
+  const task: Promise<CollisionResultLike> = getCollision(days)
+    .catch((): CollisionResultLike => ({ ok: false, reason: 'unreachable' }))
+    .then((result: CollisionResultLike): CollisionResultLike => {
       collisionInflight.delete(days);
-      if (payload) collisionCache.set(days, { time: Date.now(), data: payload });
-      return payload || null;
+      if (!result || !result.ok) return result || { ok: false, reason: 'unreachable' };
+      const payload = normalizeCollision(result);
+      if (!payload) return { ok: false, reason: 'invalid_response', status: result.status };
+      const success: CollisionResultLike = { ok: true, status: result.status, data: payload };
+      // 只缓存成功快照：配置修好 / 服务端恢复后点重试可立即重新取数
+      collisionCache.set(days, { time: Date.now(), data: success });
+      return success;
     });
   collisionInflight.set(days, task);
   return task;
@@ -146,11 +161,12 @@ async function loadCollision(days: number): Promise<any> {
 
 /**
  * 推送「数据碰撞」：默认取服务端预计算快照（按日期归档的 9 类策略归并结果）。
- * 服务端未配置 / 请求失败 / 载荷异常时下发 unavailable=true，模板直接渲染空态，
- * 不再有登录引导或本地直连兜底。
+ * 失败时把具体原因（未配置 / 密钥错 / 不可达 / 无快照 / 响应异常）透传给模板，
+ * 由模板给出对应引导；不再有登录引导或本地直连兜底。
  */
 async function pushCollision(panel: any, days: number): Promise<void> {
-  const payload = normalizeCollision(await loadCollision(days));
+  const result = await loadCollision(days);
+  const payload = result && result.ok ? normalizeCollision(result) : null;
   const data = payload
     ? {
         days,
@@ -158,6 +174,8 @@ async function pushCollision(panel: any, days: number): Promise<void> {
         available: typeof payload.available === 'number' ? payload.available : 0,
         total: typeof payload.total === 'number' ? payload.total : LQ_TAGS.length,
         unavailable: false,
+        reason: '',
+        httpStatus: 0,
         dataDate: typeof payload.dataDate === 'string' ? payload.dataDate : '',
       }
     : {
@@ -166,6 +184,8 @@ async function pushCollision(panel: any, days: number): Promise<void> {
         available: 0,
         total: LQ_TAGS.length,
         unavailable: true,
+        reason: (result && result.reason) || 'unreachable',
+        httpStatus: (result && result.status) || 0,
         dataDate: '',
       };
 

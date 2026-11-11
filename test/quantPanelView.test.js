@@ -146,6 +146,12 @@ describe('扫码登录 / 掘金分栏 / 策略选股已彻底下线', () => {
   it('量化面板命令默认打开 north tab', () => {
     assert.ok(read('src/registerCommand.ts').includes("? target.tab : 'north'"));
   });
+
+  it('dataApiBaseUrl 默认指向数据服务，API Key 仍需用户填写', () => {
+    const props = JSON.parse(read('package.json')).contributes.configuration.properties;
+    assert.ok(/^https?:\/\/\S+:\d+$/.test(props['leek-fund.dataApiBaseUrl'].default), '应默认配置服务地址');
+    assert.strictEqual(props['leek-fund.dataApiKey'].default, '', '密钥不能写进仓库');
+  });
 });
 
 describe('量化面板模板 quant.html', () => {
@@ -414,19 +420,33 @@ describe('量化面板模板 quant.html', () => {
     assert.ok(page.el('collisionBody').innerHTML.includes('没有命中'));
   });
 
-  it('服务端不可用 → 直接空态（配置提示 + 重试），没有任何登录引导', () => {
-    const page = loadTemplate('quant.html');
-    page.fire('message', { data: { type: 'init', data: collisionPayload() } });
-    page.fire('message', { data: { type: 'collision', data: collisionData({ unavailable: true }) } });
+  it('服务端失败 → 按原因显示差异化空态与重试入口，且无登录引导', () => {
+    const cases = [
+      { reason: 'unconfigured', text: '数据服务未配置', tip: 'leek-fund.dataApiBaseUrl' },
+      { reason: 'unauthorized', text: 'API Key 无效', tip: 'QP_API_KEY', httpStatus: 401 },
+      { reason: 'no_data', text: '暂无近5天碰撞快照', tip: '下一轮抓取' },
+      { reason: 'unreachable', text: '数据服务连接失败', tip: '8800 端口' },
+      { reason: 'invalid_response', text: '数据服务返回异常', tip: '服务端版本' },
+    ];
+    for (const c of cases) {
+      const page = loadTemplate('quant.html');
+      page.fire('message', { data: { type: 'init', data: collisionPayload() } });
+      page.fire('message', {
+        data: {
+          type: 'collision',
+          data: collisionData({ unavailable: true, reason: c.reason, httpStatus: c.httpStatus || 0 }),
+        },
+      });
 
-    const html = page.el('collisionBody').innerHTML;
-    assert.ok(html.includes('数据服务暂不可用'), `应显示空态，实际：${html}`);
-    assert.ok(html.includes('leek-fund.dataApiBaseUrl'), '应提示配置数据服务');
-    assert.ok(!html.includes('登录') && !html.includes('扫码'), '不应再有登录引导');
-    assert.ok(html.includes('data-action="retry"'));
+      const html = page.el('collisionBody').innerHTML;
+      assert.ok(html.includes(c.text), `${c.reason} 应显示「${c.text}」，实际：${html}`);
+      assert.ok(html.includes(c.tip), `${c.reason} 应给出对应引导：${html}`);
+      assert.ok(!html.includes('登录') && !html.includes('扫码'), '不应再有登录引导');
+      assert.ok(html.includes('data-action="retry"'), `${c.reason} 应可重试`);
 
-    page.el('collisionBody').listeners.click[0](attr('data-action', 'retry'));
-    assert.ok(page.posted.some((m) => m.command === 'refreshCollision'));
+      page.el('collisionBody').listeners.click[0](attr('data-action', 'retry'));
+      assert.ok(page.posted.some((m) => m.command === 'refreshCollision'));
+    }
   });
 
   it('数据碰撞切档 / 点击个股 → 发 selectCollisionDays / openStock', () => {
@@ -608,16 +628,38 @@ describe('量化面板宿主 quantPanel.ts', () => {
     });
   });
 
-  it('服务端不可用 → 下发 unavailable 空态，不再有登录引导或直连兜底', function () {
+  it('取数失败 → 下发 unavailable + 具体 reason/httpStatus', function () {
     this.timeout(2000);
-    apiStub.state.collision = null;
+    apiStub.state.collision = { ok: false, reason: 'unauthorized', status: 401 };
     panel.fire({ command: 'selectCollisionDays', days: 10 });
-    return waitCollision((d) => d.days === 10 && d.unavailable === true, 'unavailable').then((msg) => {
+    return waitCollision((d) => d.days === 10 && d.unavailable === true, 'unauthorized').then((msg) => {
       assert.deepStrictEqual(msg.data.rows, []);
       assert.strictEqual(msg.data.available, 0);
+      assert.strictEqual(msg.data.reason, 'unauthorized');
+      assert.strictEqual(msg.data.httpStatus, 401);
       assert.ok(apiStub.calls.some((c) => c.days === 10));
       assert.ok(!('unlogged' in msg.data) && !('failed' in msg.data));
     });
+  });
+
+  it('失败结果不进缓存：连续两次 requestCollision 都重新请求服务端', function () {
+    this.timeout(2000);
+    apiStub.state.collision = { ok: false, reason: 'no_data', status: 200 };
+    const before = apiStub.calls.length;
+    const sameResult = (m) =>
+      m.type === 'collision' && m.data.days === 10 && m.data.reason === 'no_data';
+    let count = allPushed().filter(sameResult).length;
+
+    panel.fire({ command: 'requestCollision' });
+    return waitCollision((d) => d.days === 10 && d.reason === 'no_data', 'no_data', count)
+      .then(() => {
+        count = allPushed().filter(sameResult).length;
+        panel.fire({ command: 'requestCollision' });
+        return waitCollision((d) => d.days === 10 && d.reason === 'no_data', 'no_data 二次', count);
+      })
+      .then(() => {
+        assert.strictEqual(apiStub.calls.length, before + 2, '失败不应命中 60s 快照缓存');
+      });
   });
 
   it('openStock → 转发 leek-fund.stockFundFlowForStock（参数 {id: code}）', () => {

@@ -912,9 +912,29 @@
             summary.textContent = '';
             hint.textContent = '';
             renderCollisionTags([]);
+
+            var reason = collision.reason || 'unreachable';
+            var title = '数据服务暂不可用';
+            var tip = '请稍后重试，或检查数据服务状态';
+            if (reason === 'unconfigured') {
+              title = '数据服务未配置';
+              tip = '请在设置中填写 leek-fund.dataApiBaseUrl 与 leek-fund.dataApiKey';
+            } else if (reason === 'unauthorized') {
+              title = 'API Key 无效（HTTP ' + (collision.httpStatus || 401) + '）';
+              tip = '请检查 leek-fund.dataApiKey 是否与服务端 QP_API_KEY 一致';
+            } else if (reason === 'no_data') {
+              title = '服务端暂无近' + currentCollisionDays + '天碰撞快照';
+              tip = '等待服务端下一轮抓取生成快照后重试';
+            } else if (reason === 'invalid_response') {
+              title = '数据服务返回异常';
+              tip = '请检查服务端版本与接口返回，或稍后重试';
+            } else {
+              title = '数据服务连接失败';
+              tip = '请确认 leek-fund.dataApiBaseUrl 可访问且服务已启动（8800 端口）';
+            }
             box.innerHTML =
-              '<div class="collision-placeholder">数据服务暂不可用<br>' +
-              '请配置 leek-fund.dataApiBaseUrl / leek-fund.dataApiKey 后重试<br>' +
+              '<div class="collision-placeholder"><b>' + esc(title) + '</b><br>' +
+              esc(tip) + '<br>' +
               '<button type="button" class="btn" data-action="retry">重试</button></div>';
             return;
           }
