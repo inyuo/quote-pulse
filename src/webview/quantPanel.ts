@@ -13,9 +13,12 @@
  * - 宿主 → 模板：{type:'init', data:{tab, cjl, north, index, collisionDays,
  *   collisionDayMeta, collisionTags, updatedAt}}
  * - 宿主 → 模板：{type:'collision', data:{days, rows, available, total,
- *   unavailable, reason, httpStatus, dataDate, updatedAt}}
+ *   unavailable, reason, httpStatus, dataDate, updatedAt, stale, refreshHours}}
+ * - 宿主 → 模板：{type:'apiKeyState', data:{configured, masked, baseUrl, weak}}
+ * - 宿主 → 模板：{type:'apiKeySaved', data:{ok, error}}
  * - 模板 → 宿主：ready / refresh / selectTab{tab} / requestCollision /
- *   selectCollisionDays{days} / refreshCollision / openStock{code}。
+ *   selectCollisionDays{days} / refreshCollision / openStock{code} /
+ *   setApiKey{key} / requestApiKeyState。
  *
  * 惯例沿用 stockFundFlow：attached Set 防复用面板重复挂监听、
  * 失败静默不抛错、console.error 只打 message。
@@ -33,7 +36,7 @@ import {
   LQ_COLLISION_DAYS,
   LQ_TAGS,
 } from '../shared/lqData';
-import { getCollision } from '../shared/dataApiClient';
+import { getApiKeyState, getCollision, setApiKey } from '../shared/dataApiClient';
 
 const VIEW_TYPE = 'quote-pulse.quant';
 const TITLE = '量化面板';
@@ -177,6 +180,9 @@ async function pushCollision(panel: any, days: number): Promise<void> {
         reason: '',
         httpStatus: 0,
         dataDate: typeof payload.dataDate === 'string' ? payload.dataDate : '',
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+        stale: !!payload.stale,
+        refreshHours: typeof payload.refreshHours === 'number' ? payload.refreshHours : 0,
       }
     : {
         days,
@@ -187,16 +193,44 @@ async function pushCollision(panel: any, days: number): Promise<void> {
         reason: (result && result.reason) || 'unreachable',
         httpStatus: (result && result.status) || 0,
         dataDate: '',
+        updatedAt: '',
+        stale: false,
+        refreshHours: 0,
       };
 
   try {
     await panel.webview.postMessage({
       type: 'collision',
-      data: Object.assign({}, data, { updatedAt: new Date().toISOString() }),
+      data: Object.assign({}, data, { pushedAt: new Date().toISOString() }),
     });
   } catch (e) {
     console.error('[量化面板] 推送碰撞数据失败', errMsg(e));
   }
+}
+
+/** 回显密钥状态（只含掩码，绝不下发明文） */
+async function pushApiKeyState(panel: any): Promise<void> {
+  try {
+    await panel.webview.postMessage({ type: 'apiKeyState', data: getApiKeyState() });
+  } catch (e) {
+    console.error('[量化面板] 推送密钥状态失败', errMsg(e));
+  }
+}
+
+/** 保存密钥：写用户级配置 → 清空碰撞缓存 → 回推状态与结果 → 立即重试 */
+async function saveApiKey(panel: any, raw: unknown): Promise<void> {
+  const result = await setApiKey(raw);
+  collisionCache.clear();
+  await pushApiKeyState(panel);
+  try {
+    await panel.webview.postMessage({
+      type: 'apiKeySaved',
+      data: { ok: result.ok, error: result.error || '' },
+    });
+  } catch (e) {
+    console.error('[量化面板] 推送密钥保存结果失败', errMsg(e));
+  }
+  if (currentTab === 'collision') await pushCollision(panel, currentCollisionDays);
 }
 
 function handleMessage(panel: any, message: any): void {
@@ -206,6 +240,13 @@ function handleMessage(panel: any, message: any): void {
     // 前端脚本就绪：按当前 tab 懒加载
     case 'ready':
       void pushInit(panel, currentTab);
+      void pushApiKeyState(panel);
+      break;
+    case 'requestApiKeyState':
+      void pushApiKeyState(panel);
+      break;
+    case 'setApiKey':
+      void saveApiKey(panel, message.key);
       break;
     // 顶部刷新：碰撞 tab 清该档快照缓存后重算，其余 tab 重拉当前数据
     case 'refresh':

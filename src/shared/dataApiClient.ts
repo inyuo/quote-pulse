@@ -61,6 +61,50 @@ export function isEnabled(): boolean {
   return settings().baseUrl.length > 0;
 }
 
+/** 密钥掩码：只暴露首尾各 2 位，状态回显一律走这里 */
+export function maskApiKey(raw: unknown): string {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value) return '';
+  if (value.length <= 4) return '*'.repeat(value.length);
+  return value.slice(0, 2) + '*'.repeat(value.length - 4) + value.slice(-2);
+}
+
+export interface ApiKeyState {
+  configured: boolean;
+  masked: string;
+  baseUrl: string;
+  weak: boolean;
+}
+
+/** 面板状态回显：绝不包含密钥明文 */
+export function getApiKeyState(): ApiKeyState {
+  const { baseUrl, apiKey } = settings();
+  return {
+    configured: apiKey.length > 0,
+    masked: maskApiKey(apiKey),
+    baseUrl,
+    weak: apiKey.length > 0 && apiKey.length < 16,
+  };
+}
+
+/** 写入用户级配置（全局），返回是否成功；拒绝空白与超长值 */
+export async function setApiKey(raw: unknown): Promise<{ ok: boolean; error?: string }> {
+  const key = typeof raw === 'string' ? raw.trim() : '';
+  if (key.length < 6 || key.length > 128) {
+    return { ok: false, error: '密钥长度需在 6-128 位之间' };
+  }
+  if (/\s/.test(key)) return { ok: false, error: '密钥不能包含空白字符' };
+  try {
+    const vscode = require('vscode');
+    await vscode.workspace
+      .getConfiguration('quote-pulse')
+      .update('dataApiKey', key, vscode.ConfigurationTarget.Global);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: errMsg(e) };
+  }
+}
+
 function requestHeaders(apiKey: string): Record<string, string> {
   return { 'X-API-Key': apiKey, 'Content-Type': 'application/json' };
 }
@@ -146,6 +190,8 @@ export async function getCollision(days: number, date?: string): Promise<Collisi
         ...payload,
         dataDate: typeof body.dataDate === 'string' ? body.dataDate : '',
         stale: !!body.stale,
+        updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : '',
+        refreshHours: typeof body.refreshHours === 'number' ? body.refreshHours : 0,
       },
     };
   } catch (e) {

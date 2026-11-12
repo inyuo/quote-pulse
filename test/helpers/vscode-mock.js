@@ -56,6 +56,30 @@ const commands = {
   },
 };
 
+/** 最小配置实现：记录 update 调用，供密钥入口等用例断言 */
+const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+const configValues = {};
+const configUpdates = [];
+const workspace = {
+  getConfiguration(section) {
+    return {
+      get(key) {
+        return configValues[section + '.' + key];
+      },
+      update(key, value, target) {
+        configUpdates.push({ section, key, value, target });
+        configValues[section + '.' + key] = value;
+        return Promise.resolve();
+      },
+    };
+  },
+};
+
+function resetConfig() {
+  configUpdates.length = 0;
+  for (const key of Object.keys(configValues)) delete configValues[key];
+}
+
 module.exports = {
   TreeItem,
   EventEmitter,
@@ -65,4 +89,9 @@ module.exports = {
   ViewColumn,
   commands,
   commandCalls,
+  ConfigurationTarget,
+  workspace,
+  configValues,
+  configUpdates,
+  resetConfig,
 };

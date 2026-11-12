@@ -7,6 +7,9 @@ const {
   postLjgx,
   getPublic,
   getCollision,
+  maskApiKey,
+  getApiKeyState,
+  setApiKey,
 } = require('../out/shared/dataApiClient');
 
 describe('dataApiClient 地址归一化', () => {
@@ -91,6 +94,8 @@ describe('dataApiClient.getCollision 失败原因分类', () => {
           data: { rows: [{ code: 'sh601127', hits: 2, tags: [] }], available: 9, total: 9 },
           dataDate: '2026-11-11',
           stale: true,
+          updatedAt: '2026-11-12T08:00:00+00:00',
+          refreshHours: 4,
         },
       };
     };
@@ -100,6 +105,8 @@ describe('dataApiClient.getCollision 失败原因分类', () => {
     assert.strictEqual(out.data.rows.length, 1);
     assert.strictEqual(out.data.dataDate, '2026-11-11');
     assert.strictEqual(out.data.stale, true);
+    assert.strictEqual(out.data.updatedAt, '2026-11-12T08:00:00+00:00');
+    assert.strictEqual(out.data.refreshHours, 4);
     assert.ok(lastRequest.url.endsWith('/api/v1/quant/collision'));
     assert.deepStrictEqual(lastRequest.opts.params, { days: 10, date: '2026-11-10' });
     assert.strictEqual(lastRequest.opts.headers['X-API-Key'], 'test-key');
@@ -137,5 +144,77 @@ describe('dataApiClient.getCollision 失败原因分类', () => {
   it('网络异常 / 超时 → unreachable 不抛错', async () => {
     axios.get = async () => { throw new Error('ECONNABORTED'); };
     assert.deepStrictEqual(await getCollision(5), { ok: false, reason: 'unreachable' });
+  });
+});
+
+describe('dataApiClient API Key 入口', () => {
+  const config = { baseUrl: 'http://127.0.0.1:8800', apiKey: 'slt0413' };
+  const updates = [];
+  let originalLoad;
+
+  before(() => {
+    originalLoad = Module._load;
+    Module._load = function (request, parent, isMain) {
+      if (request === 'vscode') {
+        return {
+          ConfigurationTarget: { Global: 1 },
+          workspace: {
+            getConfiguration: () => ({
+              get: (key) => (key === 'dataApiBaseUrl' ? config.baseUrl : config.apiKey),
+              update: (key, value, target) => {
+                updates.push({ key, value, target });
+                config.apiKey = value;
+                return Promise.resolve();
+              },
+            }),
+          },
+        };
+      }
+      return originalLoad.call(this, request, parent, isMain);
+    };
+  });
+
+  after(() => {
+    Module._load = originalLoad;
+  });
+
+  beforeEach(() => {
+    config.apiKey = 'slt0413';
+    updates.length = 0;
+  });
+
+  it('maskApiKey 只暴露首尾各 2 位', () => {
+    assert.strictEqual(maskApiKey('slt0413'), 'sl***13');
+    assert.strictEqual(maskApiKey('abcd'), '****');
+    assert.strictEqual(maskApiKey(''), '');
+    assert.strictEqual(maskApiKey(null), '');
+    assert.strictEqual(maskApiKey(123), '');
+  });
+
+  it('getApiKeyState 只回掩码与地址，不含明文', () => {
+    const state = getApiKeyState();
+    assert.strictEqual(state.configured, true);
+    assert.strictEqual(state.masked, 'sl***13');
+    assert.strictEqual(state.baseUrl, 'http://127.0.0.1:8800');
+    assert.strictEqual(state.weak, true);
+    assert.ok(!JSON.stringify(state).includes('slt0413'));
+  });
+
+  it('setApiKey 写入用户级全局配置', async () => {
+    const result = await setApiKey('  another-key-123456  ');
+    assert.deepStrictEqual(result, { ok: true });
+    assert.deepStrictEqual(updates, [{
+      key: 'dataApiKey', value: 'another-key-123456', target: 1,
+    }]);
+    assert.strictEqual(getApiKeyState().weak, false);
+  });
+
+  it('setApiKey 拒绝非法值且不写配置', async () => {
+    for (const bad of ['', '123', 'a b', null, undefined, 'x'.repeat(129)]) {
+      const result = await setApiKey(bad);
+      assert.strictEqual(result.ok, false, String(bad));
+    }
+    assert.strictEqual(updates.length, 0);
+    assert.strictEqual(config.apiKey, 'slt0413');
   });
 });

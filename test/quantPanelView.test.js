@@ -422,7 +422,7 @@ describe('量化面板模板 quant.html', () => {
 
   it('服务端失败 → 按原因显示差异化空态与重试入口，且无登录引导', () => {
     const cases = [
-      { reason: 'unconfigured', text: '数据服务未配置', tip: 'quote-pulse.dataApiBaseUrl' },
+      { reason: 'unconfigured', text: '数据服务未配置', tip: 'quote-pulse.dataApiKey' },
       { reason: 'unauthorized', text: 'API Key 无效', tip: 'QP_API_KEY', httpStatus: 401 },
       { reason: 'no_data', text: '暂无近5天碰撞快照', tip: '下一轮抓取' },
       { reason: 'unreachable', text: '数据服务连接失败', tip: '8800 端口' },
@@ -460,6 +460,56 @@ describe('量化面板模板 quant.html', () => {
 
     page.el('collisionBody').listeners.click[0](attr('data-code', 'sh601127'));
     assert.ok(page.posted.some((m) => m.command === 'openStock' && m.code === 'sh601127'));
+  });
+
+  it('API Key 状态只回显掩码，面板可展开保存/收起', () => {
+    const page = loadTemplate('quant.html');
+    page.fire('message', {
+      data: {
+        type: 'apiKeyState',
+        data: { configured: true, masked: 'sl***13', baseUrl: 'http://127.0.0.1:8800', weak: true },
+      },
+    });
+    const stateText = page.el('apiKeyStateText').textContent;
+    assert.ok(stateText.includes('sl***13'));
+    assert.ok(stateText.includes('弱密钥'));
+    assert.ok(!stateText.includes('slt0413'), '状态回显不得含明文');
+    assert.ok(page.el('apiKeyBtn').textContent.includes('已配置'));
+
+    page.el('apiKeyBtn').listeners.click[0]();
+    assert.ok(page.el('apiKeyPanel').className.includes('open'));
+    page.el('apiKeyInput').value = 'new-key-123456';
+    page.el('apiKeySave').listeners.click[0]();
+    assert.ok(page.posted.some((m) => m.command === 'setApiKey' && m.key === 'new-key-123456'));
+
+    page.el('apiKeyCancel').listeners.click[0]();
+    assert.ok(!page.el('apiKeyPanel').className.includes('open'));
+  });
+
+  it('密钥保存结果与失败空态的「填写 API Key」入口', () => {
+    const page = loadTemplate('quant.html');
+    page.fire('message', { data: { type: 'apiKeySaved', data: { ok: false, error: '长度不足' } } });
+    assert.ok(page.el('apiKeyMsg').textContent.includes('长度不足'));
+    assert.ok(page.el('apiKeyMsg').className.includes('error'));
+
+    page.fire('message', { data: { type: 'init', data: collisionPayload() } });
+    page.fire('message', {
+      data: {
+        type: 'collision',
+        data: collisionData({ unavailable: true, reason: 'unauthorized', httpStatus: 401 }),
+      },
+    });
+    assert.ok(page.el('collisionBody').innerHTML.includes('data-action="open-key"'));
+    page.el('collisionBody').listeners.click[0](attr('data-action', 'open-key'));
+    assert.ok(page.el('apiKeyPanel').className.includes('open'));
+  });
+
+  it('碰撞摘要展示快照时间与过期标记', () => {
+    const page = loadTemplate('quant.html');
+    showCollision(page, { updatedAt: '2026-11-12T08:00:00+08:00', stale: true });
+    const text = page.el('collisionSummary').textContent;
+    assert.ok(text.includes('快照'), `摘要应含快照时间：${text}`);
+    assert.ok(text.includes('已过期'), `过期快照应提示：${text}`);
   });
 });
 
@@ -668,5 +718,41 @@ describe('量化面板宿主 quantPanel.ts', () => {
     assert.strictEqual(vscodeMock.commandCalls.length, 1);
     assert.strictEqual(vscodeMock.commandCalls[0].name, 'quote-pulse.stockFundFlowForStock');
     assert.deepStrictEqual(vscodeMock.commandCalls[0].args[0], { id: '000001' });
+  });
+
+  it('ready 后回推 apiKeyState（不含明文）', () => {
+    const states = allPushed().filter((m) => m.type === 'apiKeyState');
+    assert.ok(states.length >= 1, 'ready 应触发密钥状态推送');
+    assert.ok(!JSON.stringify(states[0].data).includes('slt0413'));
+  });
+
+  it('setApiKey → 写配置、清碰撞缓存、回推状态与保存结果并重新取数', function () {
+    this.timeout(4000);
+    panel.fire({ command: 'selectTab', tab: 'collision' });
+    const before = allPushed().filter((m) => m.type === 'collision').length;
+    const beforeCalls = apiStub.calls.length;
+    panel.fire({ command: 'setApiKey', key: 'slt0413' });
+    return waitCollision(() => true, '保存密钥后重新取数', before).then(() => {
+      assert.ok(apiStub.configWrites.includes('slt0413'));
+      assert.ok(apiStub.calls.length > beforeCalls, '清缓存后应重新请求服务端');
+      assert.ok(allPushed().some((m) => m.type === 'apiKeySaved' && m.data.ok));
+      assert.ok(allPushed().some((m) => m.type === 'apiKeyState' && m.data.configured));
+    });
+  });
+
+  it('requestApiKeyState → 主动回推当前状态', function () {
+    this.timeout(2000);
+    const before = allPushed().filter((m) => m.type === 'apiKeyState').length;
+    panel.fire({ command: 'requestApiKeyState' });
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const tick = () => {
+        const now = allPushed().filter((m) => m.type === 'apiKeyState').length;
+        if (now > before) return resolve();
+        if (Date.now() - start > 1500) return reject(new Error('等待 apiKeyState 超时'));
+        setTimeout(tick, 10);
+      };
+      tick();
+    });
   });
 });
