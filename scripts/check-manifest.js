@@ -2,7 +2,7 @@
  * 校验 package.json 的 contributes 与 src 中 registerCommand 是否一致。
  *
  * 背景：commit c34756f 把两个命令改名成 investment-monitor.*，但 src 里仍注册
- * leek-fund.*，导致命令面板条目点击报 command not found。此脚本防止同类漂移。
+ * quote-pulse.*，导致命令面板条目点击报 command not found。此脚本防止同类漂移。
  */
 'use strict';
 

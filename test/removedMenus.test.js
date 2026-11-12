@@ -66,16 +66,16 @@ describe('已下线菜单与页面', () => {
   it('个股新闻命令、欢迎页链接与消息分发已移除', () => {
     const pkg = JSON.parse(read('package.json'));
     assert.ok(
-      !pkg.contributes.commands.some((c) => c.command === 'leek-fund.stockNews'),
-      '不应再声明 leek-fund.stockNews'
+      !pkg.contributes.commands.some((c) => c.command === 'quote-pulse.stockNews'),
+      '不应再声明 quote-pulse.stockNews'
     );
     assert.ok(
-      !JSON.stringify(pkg.contributes.viewsWelcome).includes('leek-fund.stockNews'),
+      !JSON.stringify(pkg.contributes.viewsWelcome).includes('quote-pulse.stockNews'),
       'Stock 视图欢迎内容不应再链接已删除的页面'
     );
     assert.ok(
-      !read('src/registerCommand.ts').includes("registerCommand('leek-fund.stockNews'"),
-      '不应再注册 leek-fund.stockNews'
+      !read('src/registerCommand.ts').includes("registerCommand('quote-pulse.stockNews'"),
+      '不应再注册 quote-pulse.stockNews'
     );
     assert.ok(
       !read('src/webview/leekCenterView.ts').includes('getNewsData'),
@@ -116,15 +116,15 @@ describe('已下线菜单与页面', () => {
 
     const pkg = JSON.parse(read('package.json'));
     assert.ok(
-      !pkg.contributes.commands.some((c) => c.command === 'leek-fund.toggleFlashNews'),
+      !pkg.contributes.commands.some((c) => c.command === 'quote-pulse.toggleFlashNews'),
       '不应再声明 toggleFlashNews'
     );
     assert.ok(
-      !JSON.stringify(pkg.contributes.menus).includes('leek-fund.toggleFlashNews'),
+      !JSON.stringify(pkg.contributes.menus).includes('quote-pulse.toggleFlashNews'),
       '资讯视图菜单不应再引用 toggleFlashNews'
     );
     const props = pkg.contributes.configuration.properties;
-    assert.ok(!props['leek-fund.flash-news'], '不应再保留快讯输出开关配置');
+    assert.ok(!props['quote-pulse.flash-news'], '不应再保留快讯输出开关配置');
     assert.ok(
       !props['investment-monitor.flash-news-important-only'],
       '不应再保留金十重要快讯配置'
@@ -155,7 +155,7 @@ describe('已下线菜单与页面', () => {
       '资讯侧栏视图应保留'
     );
     assert.ok(
-      pkg.contributes.commands.some((c) => c.command === 'leek-fund.refreshFollow'),
+      pkg.contributes.commands.some((c) => c.command === 'quote-pulse.refreshFollow'),
       '刷新资讯命令应保留'
     );
     assert.ok(exists('src/explorer/xxjwxcNews.ts'), 'AI 分析共用的资讯数据层应保留');

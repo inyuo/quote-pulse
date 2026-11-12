@@ -104,7 +104,7 @@ function setStockPriceCfgCb(data: IAmount[]) {
       priceDate: item.priceDate,
     };
   });
-  LeekFundConfig.setConfig('leek-fund.stockPrice', cfg).then(() => {
+  LeekFundConfig.setConfig('quote-pulse.stockPrice', cfg).then(() => {
     cacheStockPriceData(cfg);
     window.showInformationMessage('保存成功！（没开市的时候添加的持仓盈亏为0，开市时会自动计算）');
   });
@@ -162,7 +162,7 @@ export async function updateStockPrice() {
       }
     });
     if (fundInfos.length > 0) {
-      LeekFundConfig.setConfig('leek-fund.fundAmount', amountObj).then(() => {
+      LeekFundConfig.setConfig('quote-pulse.fundAmount', amountObj).then(() => {
         cacheStockPriceData(amountObj);
         console.log('🐥fundAmount has Updated ');
       });

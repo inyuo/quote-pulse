@@ -61,7 +61,7 @@ function stockTrend(code: string, name: string, stockCode: string) {
     webview.onDidReceiveMessage((msg: any) => {
       if (msg && msg.command === 'openFundFlow' && msg.code) {
         // 复用已注册的命令：资金动态的三块表格由服务端代发
-        commands.executeCommand('leek-fund.stockFundFlowForStock', { id: msg.code });
+        commands.executeCommand('quote-pulse.stockFundFlowForStock', { id: msg.code });
       }
     });
   }

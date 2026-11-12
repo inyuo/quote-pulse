@@ -35,7 +35,7 @@ import {
 } from '../shared/lqData';
 import { getCollision } from '../shared/dataApiClient';
 
-const VIEW_TYPE = 'leek-fund.quant';
+const VIEW_TYPE = 'quote-pulse.quant';
 const TITLE = '量化面板';
 const TEMPLATE = 'quant.html';
 
@@ -245,7 +245,7 @@ function handleMessage(panel: any, message: any): void {
       const code = typeof message.code === 'string' ? message.code : '';
       if (!code) break;
       try {
-        void commands.executeCommand('leek-fund.stockFundFlowForStock', { id: code });
+        void commands.executeCommand('quote-pulse.stockFundFlowForStock', { id: code });
       } catch (e) {
         console.error('[量化面板] 打开个股资金动态失败', errMsg(e));
       }

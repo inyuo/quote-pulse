@@ -2,16 +2,18 @@
 
 > 下方「leek-fund-old」章节是 2026-08-03 及更早的历史记录（远端 `leek-fund-new`、扩展名 `investment-monitor` 等），**当前状态以本节为准**。
 
-## 当前状态（2026-11-11）
+## 当前状态（2026-11-12）
 
 - **本仓库**：`quote-pulse`（行情脉冲 QuotePulse），GitHub `inyuo/quote-pulse`，活跃分支 `dev`；发布者 `inyuo`、版本基线 `1.0.0`。打包必须走 `yarn package` → `quote-pulse-1.0.0-<时间戳>.vsix`（自动清理旧包）；直接 `node scripts/package.js` 会报 `vsce: command not found`。
-- **服务端是另一个独立仓库**：Gitee 私有 `https://gitee.com/inyu_admin/invest-monitor.git`（本机 `/Users/jinyu/WorkSpace/invest-monitor`，服务器 `124.71.128.214:/root/.hermes/invest-monitor`）。`qp_service/` 数据服务以 Blueprint 挂进该 Flask 应用，端口 8800；插件通过 `leek-fund.dataApiBaseUrl` / `dataApiKey` + `/api/v1/*` 只读调用。2026-11-11 起插件**彻底删除扫码登录与本地直连降级**，服务端不可用时需登录数据直接空态。两仓库无 submodule，**改数据服务不要在本工作区找 `qp_service/`**。
-- **量化面板**（2026-11-11 重构）：入口在 `Settings` 分栏「个性定制」之后；4 个 tab `cjl/north/index/collision`，默认 `north`；数据碰撞走服务端 `/api/v1/quant/collision` 预计算快照，插件侧做标签筛选/搜索/排序；失败按 `unconfigured/unauthorized/unreachable/no_data/invalid_response` 分类提示且失败不缓存；`leek-fund.dataApiBaseUrl` 默认已指向 8800，**API Key 仍需用户手动填**（不入库）；`src/shared/lqData.ts` 与服务端 `qp_service/collide.py` 的标签口径须一致。
+- **命名空间**：2026-11-12 起命令 id、配置键、菜单/欢迎页/激活事件、模板与文档统一为 `quote-pulse.*`（44 命令 / 30 配置键），与扩展 id 对齐；`src/shared/configMigration.ts` 在激活时一次性迁移旧命名空间用户配置（旧键保留可回滚），命令 id 不保留旧别名，旧键位需重绑。view id `leekFundView.*`、`LeekFundConfig`、`leek-center/` 目录暂留；上游 URL 与历史专名保留。**Why**：用户要求系统内不再出现旧字段。**How to apply**：新增配置键同时加入迁移清单，新增命令一律用 `quote-pulse.` 前缀。
+- **服务端是另一个独立仓库**：Gitee 私有 `https://gitee.com/inyu_admin/invest-monitor.git`（本机 `/Users/jinyu/WorkSpace/invest-monitor`，服务器 `124.71.128.214:/root/.hermes/invest-monitor`）。`qp_service/` 数据服务以 Blueprint 挂进该 Flask 应用，端口 8800（同一个 app 还承载旧投资监控页面与 `/api/*`）；插件通过 `quote-pulse.dataApiBaseUrl` / `dataApiKey` + `/api/v1/*` 只读调用。2026-11-11 起插件**彻底删除扫码登录与本地直连降级**，服务端不可用时需登录数据直接空态。两仓库无 submodule，**改数据服务不要在本工作区找 `qp_service/`**。
+- **量化面板**（2026-11-11 重构）：入口在 `Settings` 分栏「个性定制」之后；4 个 tab `cjl/north/index/collision`，默认 `north`；数据碰撞走服务端 `/api/v1/quant/collision` 预计算快照，插件侧做标签筛选/搜索/排序；失败按 `unconfigured/unauthorized/unreachable/no_data/invalid_response` 分类提示且失败不缓存；`quote-pulse.dataApiBaseUrl` 默认已指向 8800，**API Key 仍需用户手动填**（不入库）；`src/shared/lqData.ts` 与服务端 `qp_service/collide.py` 的标签口径须一致。
+- **8800 运维**：单 worker 僵死时表现为 TCP 可连但全站 HTTP 空回复；`./run.sh restart` 可恢复（2026-11-12 已验证 health 401 / root 302）。服务器另有绑定 `127.0.0.1:8050` 的 gunicorn 实例，不要混淆。
 - **服务器旧改动保留在 Gitee 分支 `server-local-20261110`**（`7f83000`、`a873d9d`），未合并 master；全量备份 `/root/backup/invest-monitor-worktree-20261110.tar.gz`。master 基线 `718126e`。
-- **密钥/凭据**：服务器 `/etc/qp-data-service.env`（600）存 API Key、Flask secret、Fernet key、应急密码哈希；不进仓库。Gitee 凭据在服务器 `credential.helper=store` / 本机钥匙串。
+- **密钥/凭据**：服务器 `/etc/qp-data-service.env`（600）存 API Key、Flask secret、Fernet key、应急密码哈希；不进仓库。SSH 到服务器需 `~/.ssh/huaweicloud_key`（`root@124.71.128.214`，主机密钥已加入 known_hosts）；Gitee 凭据在服务器 `credential.helper=store` / 本机钥匙串。
 - **网络**：本机 GitHub 直连不通，push 需 `https_proxy=http://127.0.0.1:7897`；Gitee 直连可用；服务器公网仅放行 `22/8888/6700/7863/5532/6699/8800`。
 - **自动推送**：每次代码变更后自动 commit + push（两个仓库都适用）。
-- **详细日志**：[2026-11-10](2026-11-10.md)（数据服务搭建、关联关系处理、验证结果）、[2026-11-11](2026-11-11.md)（量化面板重构口径、改动清单与验证）。
+- **详细日志**：[2026-11-10](2026-11-10.md)（数据服务搭建、关联关系处理）、[2026-11-11](2026-11-11.md)（量化面板重构与空态分类）、[2026-11-12](2026-11-12.md)（8800 服务清单与故障恢复、命名空间更名与配置迁移）。
 - **`.codebuddy/` 自 2026-11-11 起不再被 `.gitignore` 忽略**，整个目录（含历史日记 `2026-07-27.md` / `2026-08-01.md` / `2026-08-03.md`）纳入版本库，后续新增记忆文件直接 `git add` 即可。
 
 ## 项目：leek-fund-old（VS Code 扩展 LeekFund / 韭菜盒子）
@@ -26,7 +28,7 @@
 - **Release 工作流**：`.github/workflows/release.yml` — push `v*` tag → 自动构建 `yarn compile && yarn package` → 上传 `investment-monitor-*.vsix` 为 Release asset。
 - **发版流程**：`yarn release`（standard-version bump 版本 + 打 v* tag + 更新 CHANGELOG）→ `git push --follow-tags origin dev` → GitHub Action 自动产出 Release。
 - **git push 网络问题**：特定环境下需 `GIT_HTTP_VERSION=1.1 git push`（默认 HTTP2 协商失败）。
-- **AI 配置不入包**：API Key 等通过 `workspace.getConfiguration('leek-fund.aiConfig')` 存于 VS Code 本地 settings，不会打包进 .vsix。
+- **AI 配置不入包**：API Key 等通过 `workspace.getConfiguration('quote-pulse.aiConfig')` 存于 VS Code 本地 settings，不会打包进 .vsix。
 
 ## 用户偏好
 - 用中文对话与回答。

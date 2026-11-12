@@ -58,7 +58,7 @@ export class NewsProvider implements TreeDataProvider<NewsNode> {
     });
     placeholder.command = {
       title: '刷新资讯',
-      command: 'leek-fund.refreshFollow',
+      command: 'quote-pulse.refreshFollow',
       arguments: [],
     };
     return [placeholder];

@@ -26,7 +26,7 @@ const {
 
 function makeStore(session) {
   const map = new Map();
-  if (session) map.set('leek-fund.ljgxSession', session);
+  if (session) map.set('quote-pulse.ljgxSession', session);
   return {
     get: (key) => map.get(key),
     update: (key, value) => {

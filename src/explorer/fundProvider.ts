@@ -15,7 +15,7 @@ export class FundProvider implements TreeDataProvider<LeekTreeItem> {
 
   constructor(service: FundService) {
     this.service = service;
-    this.order = LeekFundConfig.getConfig('leek-fund.fundSort') || SortType.NORMAL;
+    this.order = LeekFundConfig.getConfig('quote-pulse.fundSort') || SortType.NORMAL;
   }
 
   refresh(): any {
@@ -90,7 +90,7 @@ export class FundProvider implements TreeDataProvider<LeekTreeItem> {
     } else if (order === 0) {
       this.order = SortType.NORMAL;
     }
-    LeekFundConfig.setConfig('leek-fund.fundSort', this.order);
+    LeekFundConfig.setConfig('quote-pulse.fundSort', this.order);
     this.refresh();
   }
 
@@ -104,7 +104,7 @@ export class FundProvider implements TreeDataProvider<LeekTreeItem> {
     } else {
       this.order = SortType.AMOUNTDESC;
     }
-    LeekFundConfig.setConfig('leek-fund.fundSort', this.order);
+    LeekFundConfig.setConfig('quote-pulse.fundSort', this.order);
     this.refresh();
   }
 }

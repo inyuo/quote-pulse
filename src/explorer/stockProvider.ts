@@ -19,10 +19,10 @@ export class StockProvider implements TreeDataProvider<LeekTreeItem> {
 
   constructor(service: StockService) {
     this.service = service;
-    this.order = LeekFundConfig.getConfig('leek-fund.stockSort') || SortType.NORMAL;
-    this.expandAStock = LeekFundConfig.getConfig('leek-fund.expandAStock', true);
-    this.expandHKStock = LeekFundConfig.getConfig('leek-fund.expandHKStock', false);
-    this.expandUSStock = LeekFundConfig.getConfig('leek-fund.expandUSStock', false);
+    this.order = LeekFundConfig.getConfig('quote-pulse.stockSort') || SortType.NORMAL;
+    this.expandAStock = LeekFundConfig.getConfig('quote-pulse.expandAStock', true);
+    this.expandHKStock = LeekFundConfig.getConfig('quote-pulse.expandHKStock', false);
+    this.expandUSStock = LeekFundConfig.getConfig('quote-pulse.expandUSStock', false);
   }
 
   refresh(): any {
@@ -32,7 +32,7 @@ export class StockProvider implements TreeDataProvider<LeekTreeItem> {
   getChildren(element?: LeekTreeItem | undefined): LeekTreeItem[] | Thenable<LeekTreeItem[]> {
     if (!element) {
       // Root view
-      const stockCodes = LeekFundConfig.getConfig('leek-fund.stocks') || [];
+      const stockCodes = LeekFundConfig.getConfig('quote-pulse.stocks') || [];
       // const stockList: string[] = uniq(compact(flattenDeep(stockCodes)));
       return this.service.getData(stockCodes, this.order).then(() => {
         return this.getRootNodes();
@@ -166,7 +166,7 @@ export class StockProvider implements TreeDataProvider<LeekTreeItem> {
     } else if (order === 0) {
       this.order = SortType.NORMAL;
     }
-    LeekFundConfig.setConfig('leek-fund.stockSort', this.order);
+    LeekFundConfig.setConfig('quote-pulse.stockSort', this.order);
     this.refresh();
   }
 }

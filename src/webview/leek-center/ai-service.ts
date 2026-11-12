@@ -28,7 +28,7 @@ export class AiService {
 
   private getAiConfig() {
     const config = workspace.getConfiguration();
-    const aiConfig = config.get('leek-fund.aiConfig') || {
+    const aiConfig = config.get('quote-pulse.aiConfig') || {
       apiKey: '',
       baseUrl: '',
       model: '',
@@ -41,7 +41,7 @@ export class AiService {
 
   private updateAiConfig(data: any) {
     const config = workspace.getConfiguration();
-    config.update('leek-fund.aiConfig', data, true).then(() => {
+    config.update('quote-pulse.aiConfig', data, true).then(() => {
       this.webview.postMessage({
         command: 'saveSuccess'
       });
@@ -86,7 +86,7 @@ export class AiService {
   async send_ai(userMessage: string): Promise<string> {
     try {
       const config = workspace.getConfiguration();
-      const aiConfig: any = config.get('leek-fund.aiConfig');
+      const aiConfig: any = config.get('quote-pulse.aiConfig');
       
       if(!aiConfig?.apiKey || !aiConfig?.baseUrl || !aiConfig?.model) {
         return "AI配置不完整,请检查配置";
@@ -132,7 +132,7 @@ export class AiService {
     }
 
     const cfg = workspace.getConfiguration();
-    const range: string = cfg.get('leek-fund.aiStockHistoryRange', '3m');
+    const range: string = cfg.get('quote-pulse.aiStockHistoryRange', '3m');
     const rangeLabel: Record<string, string> = {
       '1y': '近1年',
       '6m': '近6个月',

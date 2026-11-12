@@ -4,7 +4,7 @@ import ReusedWebviewPanel from './ReusedWebviewPanel';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function fundFlow(context?: ExtensionContext) {
-  const panel = ReusedWebviewPanel.create('leek-fund.fundFlow', '沪深通资金流向', ViewColumn.One, {
+  const panel = ReusedWebviewPanel.create('quote-pulse.fundFlow', '沪深通资金流向', ViewColumn.One, {
     enableScripts: true,
     retainContextWhenHidden: true,
   });
@@ -13,7 +13,7 @@ function fundFlow(context?: ExtensionContext) {
 
 export function mainFundFlow() {
   const panel = ReusedWebviewPanel.create(
-    'leek-fund.mainFundFlow',
+    'quote-pulse.mainFundFlow',
     '主力资金流向',
     ViewColumn.One,
     {

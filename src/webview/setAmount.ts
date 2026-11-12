@@ -35,7 +35,7 @@ async function setAmount(fundService: FundService) {
         // panel.webview.html = `<h3>loading</h3>`;
         // getWebviewContent(panel);
         // 如果消息中有sortType，使用它；否则使用保存的配置
-        const sortType = message.sortType || LeekFundConfig.getConfig('leek-fund.fundAmountSort', 'default');
+        const sortType = message.sortType || LeekFundConfig.getConfig('quote-pulse.fundAmountSort', 'default');
         panel.webview.postMessage({
           command: 'init',
           data: list,
@@ -44,7 +44,7 @@ async function setAmount(fundService: FundService) {
         return;
       case 'saveSort':
         // 保存排序方式
-        LeekFundConfig.setConfig('leek-fund.fundAmountSort', message.sortType);
+        LeekFundConfig.setConfig('quote-pulse.fundAmountSort', message.sortType);
         return;
     }
   }, undefined);
@@ -52,7 +52,7 @@ async function setAmount(fundService: FundService) {
   getWebviewContent(panel);
   
   // 初始化时发送保存的排序方式
-  const savedSortType = LeekFundConfig.getConfig('leek-fund.fundAmountSort', 'default');
+  const savedSortType = LeekFundConfig.getConfig('quote-pulse.fundAmountSort', 'default');
   const list = fundDataHandler(fundService);
   panel.webview.postMessage({
     command: 'init',
@@ -131,7 +131,7 @@ function setAmountCfgCb(data: IAmount[]) {
       priceDate: item.priceDate,
     };
   });
-  LeekFundConfig.setConfig('leek-fund.fundAmount', cfg).then(() => {
+  LeekFundConfig.setConfig('quote-pulse.fundAmount', cfg).then(() => {
     cacheFundAmountData(cfg);
     window.showInformationMessage('保存成功！（没开市的时候添加的持仓盈亏为0，开市时会自动计算）');
   });
@@ -200,7 +200,7 @@ export async function updateAmount() {
       }
     });
     if (fundInfos.length > 0) {
-      LeekFundConfig.setConfig('leek-fund.fundAmount', amountObj).then(() => {
+      LeekFundConfig.setConfig('quote-pulse.fundAmount', amountObj).then(() => {
         cacheFundAmountData(amountObj);
         console.log('🐥fundAmount has Updated ');
       });

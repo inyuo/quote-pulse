@@ -104,7 +104,7 @@ function errMsg(e: any): string {
 export function hasXxjSession(deps?: { store?: any }): boolean {
   if (deps && deps.store) {
     try {
-      const s = deps.store.get && deps.store.get('leek-fund.ljgxSession');
+      const s = deps.store.get && deps.store.get('quote-pulse.ljgxSession');
       return !!(s && s.sessionId);
     } catch (e) {
       return false;

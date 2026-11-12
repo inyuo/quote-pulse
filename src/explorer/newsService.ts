@@ -36,7 +36,7 @@ export class NewsTreeItem extends TreeItem {
     this.tooltip = `[${news.timeLabel}] ${news.title}\n${news.summary}`;
     this.command = {
       title: '查看资讯原文',
-      command: 'leek-fund.newItemClick',
+      command: 'quote-pulse.newItemClick',
       arguments: [news],
     };
   }
@@ -67,7 +67,7 @@ export class NewsSourceGroupTreeItem extends TreeItem {
       ? TreeItemCollapsibleState.Collapsed
       : TreeItemCollapsibleState.Expanded;
     if (group.failed) {
-      this.command = { title: '刷新资讯', command: 'leek-fund.refreshFollow', arguments: [] };
+      this.command = { title: '刷新资讯', command: 'quote-pulse.refreshFollow', arguments: [] };
     }
   }
 }

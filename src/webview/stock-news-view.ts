@@ -29,8 +29,8 @@ type AiConfig = {
 /**
  * 个股 AI 分析。
  *
- * 原「个股新闻」webview 页面与 leek-fund.stockNews 命令已下线，
- * 本类只保留 leek-fund.aiStockAnalysis 使用的分析能力。
+ * 原「个股新闻」webview 页面与 quote-pulse.stockNews 命令已下线，
+ * 本类只保留 quote-pulse.aiStockAnalysis 使用的分析能力。
  */
 export class StockNewsView {
   private static instance: StockNewsView;
@@ -88,7 +88,7 @@ export class StockNewsView {
     }
 
     const cfg = workspace.getConfiguration();
-    const range: string = cfg.get('leek-fund.aiStockHistoryRange', '3m');
+    const range: string = cfg.get('quote-pulse.aiStockHistoryRange', '3m');
     const rangeLabel =
       {
         '1y': '近1年',
@@ -191,7 +191,7 @@ export class StockNewsView {
   }
 
   getAiConfig(): AiConfig {
-    const result = workspace.getConfiguration().get('leek-fund.aiConfig', {
+    const result = workspace.getConfiguration().get('quote-pulse.aiConfig', {
       apiKey: '',
       baseUrl: '',
       model: '',

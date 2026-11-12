@@ -33,8 +33,8 @@
 - [x] 4c. 多源编排层 `src/shared/fundFlowData.ts`（A 逐股 / D 行业 / B+C 详情）
 - [x] 5. 开窗 `src/webview/stockFundFlow.ts` + `template/stock-fund-flow.html`
       （四区 + canvas 双轴图，零外部依赖）
-- [x] 6. 命令注册 2 条：`leek-fund.viewStockFundFlow`（命令面板）、
-      `leek-fund.stockFundFlowForStock`（自选股右键，`group3`），
+- [x] 6. 命令注册 2 条：`quote-pulse.viewStockFundFlow`（命令面板）、
+      `quote-pulse.stockFundFlowForStock`（自选股右键，`group3`），
       通过 `check-manifest` 一致性测试
 - [x] 4d. A 粒度备源接入：`xxjwxc 失败 → 东财 fflow 当日值`；
       删除未接入的新浪逐日源（语义为逐日粒度，与分时的 B 不匹配，
@@ -61,7 +61,7 @@
 
 ## 决策记录
 
-- **不加 `leek-fund.xxjwxc.enabled` 配置开关**：YAGNI。降级链路已保证接口挂掉时
+- **不加 `quote-pulse.xxjwxc.enabled` 配置开关**：YAGNI。降级链路已保证接口挂掉时
   区块显示「暂无数据」而非报错，开关只省几次失败请求噪音，不值得膨胀
   `package.json` 配置（已有 43 命令）。
 - **不引入 echarts**：`price[]`/`main[]` 双数组画双轴约 60 行 canvas，
@@ -211,9 +211,9 @@
 | 复用 | `src/shared/ljgxData.ts` | 导出 `ljgxPostAuth`，不重复实现鉴权 POST |
 | 模板 | `template/quant.html` | 第 4 tab DOM 表格、9 chips + 8 档天数、分组折叠行、未登录/加载/失败占位；渲染分发改显式分支；补 `resize` 监听 |
 | 宿主 | `src/webview/quantPanel.ts` | lq 懒加载、按 `tag+days` 的 30min 缓存与在途合并、`selectLqTag`/`selectLqDays`/`openStock` 消息、`quantPanel(...,tag)` |
-| 树/命令 | `src/explorer/quantProvider.ts`、`src/registerCommand.ts` | 已登录新增「策略选股」面板入口；`leek-fund.quantOpen` 放行 `lq` 并透传 `tag` |
+| 树/命令 | `src/explorer/quantProvider.ts`、`src/registerCommand.ts` | 已登录新增「策略选股」面板入口；`quote-pulse.quantOpen` 放行 `lq` 并透传 `tag` |
 
-`lq` 行「资金动态」复用 `leek-fund.stockFundFlowForStock {id: code}`；`tsTags` 只展示文本、不跳外链。
+`lq` 行「资金动态」复用 `quote-pulse.stockFundFlowForStock {id: code}`；`tsTags` 只展示文本、不跳外链。
 
 ### 验证与待办
 
@@ -255,7 +255,7 @@
 - 新增 `test/newsSources.test.js` 17 条（元数据/请求体/降级/分组归一/分级缓存/两级树/URL 分流）；
   `npx tsc -p ./` 0 error、`eslint` 0 error / 5 warning（既有基线）、排除外部网络 503 用例后全量 **205 passing**。
 - **待办**：登录后真机核对四来源返回的分组标题、行字段与 `tag` 取值；单来源精确重试目前复用全量
-  `leek-fund.refreshFollow`（未做按 key 的单独刷新命令）。
+  `quote-pulse.refreshFollow`（未做按 key 的单独刷新命令）。
 
 ## 追加：掘金树精简 + 量价分层修复（2026-11-04）
 
@@ -266,7 +266,7 @@
   `[微信扫码登录 或 用户名, 打开量化面板]`。面板内 4 个 tab 全部保留，进去后自行切换。
 - `src/explorer/quantProvider.ts`：删除 `darkSpecs` / `darkRowSpec` / `DARK_TTL_MS` /
   `isSameDay` / `doFetchDarkBuy` 与榜单缓存字段；`QuantState` 只剩 `session/sessionValid`；
-  `refreshData()` 语义改为「重新校验会话 + 重绘」（`leek-fund.refreshQuant` 命令与
+  `refreshData()` 语义改为「重新校验会话 + 重绘」（`quote-pulse.refreshQuant` 命令与
   `package.json` 贡献点不变）。数据层 `fetchDarkBuy` 保留但不再有调用方。
 - `test/quantTree.test.js` 重写为 10 条（节点编排 5 + Provider 会话 TTL 5）。
 
@@ -302,7 +302,7 @@
   `POST /shares.get_dark_buy`「暗/明盘资金榜」（全市场榜单），两者不要混用。
 - 页面另有 `analy.get_share_main`（主力净流入图）、`analy.get_share_cjl`（成交额对比）、
   `shares.get_hk_market_kline`（港股多空博弈），按用户确认的范围**不接入**。
-- **登录态实测（IDE 已登录）**：用 `globalState` 里的 `leek-fund.ljgxSession` 带
+- **登录态实测（IDE 已登录）**：用 `globalState` 里的 `quote-pulse.ljgxSession` 带
   `user-token` 请求 `sz000977`，`state:true`，`data.list` 有 **13 块** —— 前三块正是
   主力分析 / 主力资金 / 明/暗盘，后面还有违规记录、分红配送、业绩预告、增减持、
   高管增减持、计划回购、大宗交易、近期龙虎榜、近期游资榜、名人分析。
@@ -344,7 +344,7 @@
 
 ### 入口链路
 
-Stock 视图（`leekFundView.stock`，name = `Stock`）点击个股 → `leek-fund.stockItemClick`
+Stock 视图（`leekFundView.stock`，name = `Stock`）点击个股 → `quote-pulse.stockItemClick`
 → `src/webview/stockTrend.ts` 的「股票实时走势」面板（内嵌东财 h5chart iframe）。
 该面板原先没有任何插件自己的入口，现顶部工具条加「资金动态」按钮。
 
@@ -355,7 +355,7 @@ Stock 视图（`leekFundView.stock`，name = `Stock`）点击个股 → `leek-fu
     港股（`hk…`）、美股（`gb_`/`usr_…`）、指数不显示按钮
     （资金动态三块走 `analy.get_sp`，只支持 A 股个股）。
   - 顶部 sticky 工具条 + `#fundFlowBtn`，点击 `postMessage({command:'openFundFlow', code})`。
-  - 宿主 `webview.onDidReceiveMessage` 执行 `leek-fund.stockFundFlowForStock`，
+  - 宿主 `webview.onDidReceiveMessage` 执行 `quote-pulse.stockFundFlowForStock`，
     参数 `{ id: stockCode }`（已是 `sh600519` 形式，无需代码归一）；该命令内部会
     `initStockFundFlow(store)` 注入登录态，三块表格能取到数据。
   - 面板由 `ReusedWebviewPanel` 复用，消息监听用 `webview.__leekFundFlowBound`

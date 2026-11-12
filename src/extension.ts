@@ -18,6 +18,7 @@ import globalState from './globalState';
 import { registerCommandPaletteEvent, registerQuant, registerViewEvent } from './registerCommand';
 import { HolidayHelper } from './shared/holidayHelper';
 import { LeekFundConfig } from './shared/leekConfig';
+import { migrateLegacyConfig } from './shared/configMigration';
 import Log from './shared/log';
 import { SortType } from './shared/typed';
 import { events, formatDate, isStockTime } from './shared/utils';
@@ -42,10 +43,12 @@ let binanceTreeView: TreeView<any> | null = null;
 let profitBar: ProfitStatusBar | null = null;
 
 export async function activate(context: ExtensionContext) {
+  // 旧命名空间配置迁移：必须在读取任何配置前完成，保证升级后用户设置不丢失
+  await migrateLegacyConfig();
   globalState.isDevelopment = process.env.NODE_ENV === 'development';
   globalState.context = context;
 
-  let intervalTimeConfig = LeekFundConfig.getConfig('leek-fund.interval', 5000);
+  let intervalTimeConfig = LeekFundConfig.getConfig('quote-pulse.interval', 5000);
   let intervalTime = intervalTimeConfig;
 
   // 节假日，异步会存在延迟判断准确问题，设置成同步影响插件激活速度，暂使用异步
@@ -94,12 +97,12 @@ export async function activate(context: ExtensionContext) {
 
   // fix when TreeView collapse https://github.com/giscafer/leek-fund/issues/31
   const manualRequest = () => {
-    const fundLists = LeekFundConfig.getConfig('leek-fund.funds') || [];
+    const fundLists = LeekFundConfig.getConfig('quote-pulse.funds') || [];
     fundLists.forEach((value: Array<string>, index: number) => {
       fundService.getData(value, SortType.NORMAL, `fundGroup_${index}`);
     });
 
-    stockService.getData(LeekFundConfig.getConfig('leek-fund.stocks'), SortType.NORMAL);
+    stockService.getData(LeekFundConfig.getConfig('quote-pulse.stocks'), SortType.NORMAL);
   };
 
   manualRequest();
@@ -189,7 +192,7 @@ export async function activate(context: ExtensionContext) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   workspace.onDidChangeConfiguration((e: ConfigurationChangeEvent) => {
     Log.info('Configuration changed');
-    intervalTimeConfig = LeekFundConfig.getConfig('leek-fund.interval');
+    intervalTimeConfig = LeekFundConfig.getConfig('quote-pulse.interval');
     setIntervalTime();
     setGlobalVariable();
     statusBar.refresh();
@@ -232,53 +235,40 @@ export async function activate(context: ExtensionContext) {
 }
 
 function setGlobalVariable() {
-  const stockPrice = LeekFundConfig.getConfig('leek-fund.stockPrice') || {};
+  const stockPrice = LeekFundConfig.getConfig('quote-pulse.stockPrice') || {};
   cacheStockPriceData(stockPrice);
 
-  const fundAmount = LeekFundConfig.getConfig('leek-fund.fundAmount') || {};
+  const fundAmount = LeekFundConfig.getConfig('quote-pulse.fundAmount') || {};
   cacheFundAmountData(fundAmount);
 
-  globalState.iconType = LeekFundConfig.getConfig('leek-fund.iconType') || 'arrow';
+  globalState.iconType = LeekFundConfig.getConfig('quote-pulse.iconType') || 'arrow';
 
-  globalState.stockHeldTipShow = LeekFundConfig.getConfig('leek-fund.stockHeldTipShow') ?? true;
+  globalState.stockHeldTipShow = LeekFundConfig.getConfig('quote-pulse.stockHeldTipShow') ?? true;
 
-  const stocksRemind = LeekFundConfig.getConfig('leek-fund.stocksRemind') || {};
+  const stocksRemind = LeekFundConfig.getConfig('quote-pulse.stocksRemind') || {};
   cacheStocksRemindData(stocksRemind);
 
-  globalState.showEarnings = LeekFundConfig.getConfig('leek-fund.showEarnings');
+  globalState.showEarnings = LeekFundConfig.getConfig('quote-pulse.showEarnings');
 
-  globalState.remindSwitch = LeekFundConfig.getConfig('leek-fund.stockRemindSwitch');
+  globalState.remindSwitch = LeekFundConfig.getConfig('quote-pulse.stockRemindSwitch');
 
-  globalState.kLineChartSwitch = LeekFundConfig.getConfig('leek-fund.stockKLineChartSwitch');
+  globalState.kLineChartSwitch = LeekFundConfig.getConfig('quote-pulse.stockKLineChartSwitch');
 
-  globalState.labelFormat = LeekFundConfig.getConfig('leek-fund.labelFormat');
+  globalState.labelFormat = LeekFundConfig.getConfig('quote-pulse.labelFormat');
 
-  globalState.immersiveBackground = LeekFundConfig.getConfig('leek-fund.immersiveBackground', true);
+  globalState.immersiveBackground = LeekFundConfig.getConfig('quote-pulse.immersiveBackground', true);
 
-  globalState.fundGroups = LeekFundConfig.getConfig('leek-fund.fundGroups') || [];
+  globalState.fundGroups = LeekFundConfig.getConfig('quote-pulse.fundGroups') || [];
 
-  const fundLists = LeekFundConfig.getConfig('leek-fund.funds') || [];
+  const fundLists = LeekFundConfig.getConfig('quote-pulse.funds') || [];
   if (typeof fundLists[0] === 'string' || fundLists[0] instanceof String) {
     // 迁移用户的基金代码到分组模式
     const newFundLists = [fundLists];
     globalState.fundLists = newFundLists;
-    LeekFundConfig.setConfig('leek-fund.funds', newFundLists);
+    LeekFundConfig.setConfig('quote-pulse.funds', newFundLists);
   } else {
     globalState.fundLists = fundLists;
   }
-  // 临时解决3.10.1~3.10.3 pr产生的分组bug
-  // const leekFundExt = extensions.getExtension('giscafer.leek-fund');
-  // const currentVersion = leekFundExt?.packageJSON?.version;
-  // if (compare(currentVersion, '3.9.2', '>=')) {
-  // const arr = LeekFundConfig.getConfig('leek-fund.stocks') || [];
-  // const flag = arr.some((a: any) => Array.isArray(a));
-  // if (flag) {
-  //   const stockList = uniq(compact(flattenDeep(arr)));
-  //   Log.info(" ~ setGlobalVariable ~ stockList:", stockList);
-  //   LeekFundConfig.setConfig('leek-fund.stocks', stockList);
-  // }
-
-  // }
 }
 
 // this method is called when your extension is deactivated

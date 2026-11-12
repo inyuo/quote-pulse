@@ -4,7 +4,7 @@ import { getTemplateFileContent } from '../shared/utils';
 import { loadStockFundRows, loadIndustryRows, loadStockDetail } from '../shared/fundFlowData';
 import { LeekFundConfig } from '../shared/leekConfig';
 
-const VIEW_TYPE = 'leek-fund.stockFundFlow';
+const VIEW_TYPE = 'quote-pulse.stockFundFlow';
 const TITLE = '资金动态';
 
 /** 日志只取 message：避免 axios 错误对象（含完整 config/request）刷屏输出面板 */
@@ -39,7 +39,7 @@ let pendingInitialCode = '';
 /** 自选股列表来自本地配置，不依赖任何外部接口 */
 function readWatchlist(): string[] {
   try {
-    const raw = workspace.getConfiguration('leek-fund').get('stocks');
+    const raw = workspace.getConfiguration('quote-pulse').get('stocks');
     if (!Array.isArray(raw)) return [];
     return raw.filter((code) => typeof code === 'string' && code.length > 0);
   } catch (e) {
@@ -119,7 +119,7 @@ function handleMessage(panel: any, message: any): void {
         void pushDetail(panel, message.code);
       }
       break;
-    // 顶栏「加入自选」→ 复用配置层写入 leek-fund.stocks，再刷新 Stock 树与本页面
+    // 顶栏「加入自选」→ 复用配置层写入 quote-pulse.stocks，再刷新 Stock 树与本页面
     case 'addStock': {
       const code = typeof message.code === 'string' ? message.code.toLowerCase() : '';
       // 只接受沪深 6 位代码；已在自选里则不重复写（updateStockCfg 也会去重）
@@ -127,7 +127,7 @@ function handleMessage(panel: any, message: any): void {
       if (readWatchlist().indexOf(code) >= 0) break;
       try {
         LeekFundConfig.updateStockCfg(code, () => {
-          void commands.executeCommand('leek-fund.refreshStock');
+          void commands.executeCommand('quote-pulse.refreshStock');
           void pushInit(panel);
         });
       } catch (e) {
@@ -144,7 +144,7 @@ function handleMessage(panel: any, message: any): void {
       // 首参为 '0'+6 位代码（走势页用 substr(1) 取 6 位），末参保留 sh/sz 前缀供 market 判断
       try {
         void commands.executeCommand(
-          'leek-fund.stockItemClick',
+          'quote-pulse.stockItemClick',
           '0' + code.substring(2),
           name,
           '',

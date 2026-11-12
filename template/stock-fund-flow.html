@@ -401,7 +401,7 @@
         var externalCode = '';
         /** 已跳入过的外部个股：刷新后仍要保留在下拉里，直到面板销毁 */
         var pinnedCode = '';
-        /** 宿主下发的 leek-fund.stocks，用于「加入自选」按钮状态 */
+        /** 宿主下发的 quote-pulse.stocks，用于「加入自选」按钮状态 */
         var watchlist = [];
         var addingCode = ''; // 等待写配置回执，防重复点击
         var listReady = false;
@@ -960,7 +960,7 @@
           return /^(sh|sz)\d{6}$/.test(code || '') && !/^(sh000|sz399)/.test(code);
         }
 
-        /** 当前股票是否已在 leek-fund.stocks 里 */
+        /** 当前股票是否已在 quote-pulse.stocks 里 */
         function inWatchlist(code) {
           for (var i = 0; i < watchlist.length; i++) {
             if (watchlist[i] === code) return true;
@@ -1048,7 +1048,7 @@
           }
         });
 
-        // 顶栏「加入自选」→ 宿主写入 leek-fund.stocks 并刷新侧边栏 Stock 树
+        // 顶栏「加入自选」→ 宿主写入 quote-pulse.stocks 并刷新侧边栏 Stock 树
         $('addStockBtn').addEventListener('click', function () {
           if (!selectedCode || inWatchlist(selectedCode) || addingCode) return;
           addingCode = selectedCode;
@@ -1056,7 +1056,7 @@
           vscode.postMessage({ command: 'addStock', code: selectedCode });
         });
 
-        // 顶栏「实时走势」→ 宿主转发 leek-fund.stockItemClick 打开股票实时走势面板
+        // 顶栏「实时走势」→ 宿主转发 quote-pulse.stockItemClick 打开股票实时走势面板
         $('trendBtn').addEventListener('click', function () {
           if (!canOpenTrend(selectedCode)) return;
           var name = '';

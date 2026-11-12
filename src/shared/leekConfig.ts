@@ -63,8 +63,8 @@ export class LeekFundConfig extends BaseConfig {
   static addFundGroupCfg(name: string, cb?: Function) {
     globalState.fundGroups.push(name);
     globalState.fundLists.push([]);
-    this.setConfig('leek-fund.fundGroups', globalState.fundGroups);
-    this.setConfig('leek-fund.funds', globalState.fundLists);
+    this.setConfig('quote-pulse.fundGroups', globalState.fundGroups);
+    this.setConfig('quote-pulse.funds', globalState.fundLists);
     window.showInformationMessage(`Fund Group Successfully add.`);
     if (cb && typeof cb === 'function') {
       cb(name);
@@ -74,7 +74,7 @@ export class LeekFundConfig extends BaseConfig {
   static renameFundGroupCfg(groupId: string, name: string, cb?: Function) {
     const index: number = parseInt(groupId.replace('fundGroup_', ''));
     globalState.fundGroups[index] = name;
-    this.setConfig('leek-fund.fundGroups', globalState.fundGroups);
+    this.setConfig('quote-pulse.fundGroups', globalState.fundGroups);
     window.showInformationMessage(`Fund Group Successfully rename.`);
     if (cb && typeof cb === 'function') {
       cb(groupId);
@@ -87,8 +87,8 @@ export class LeekFundConfig extends BaseConfig {
     const removeFundGroup = () => {
       globalState.fundGroups.splice(index, 1);
       globalState.fundLists.splice(index, 1);
-      this.setConfig('leek-fund.fundGroups', globalState.fundGroups);
-      this.setConfig('leek-fund.funds', globalState.fundLists);
+      this.setConfig('quote-pulse.fundGroups', globalState.fundGroups);
+      this.setConfig('quote-pulse.funds', globalState.fundLists);
       window.showInformationMessage(`Fund Group Successfully delete.`);
       if (cb && typeof cb === 'function') {
         cb(groupId);
@@ -115,7 +115,7 @@ export class LeekFundConfig extends BaseConfig {
     updatedFunds = clean(updatedFunds);
     updatedFunds = uniq(updatedFunds);
     globalState.fundLists[index] = updatedFunds as never;
-    this.setConfig('leek-fund.funds', globalState.fundLists);
+    this.setConfig('quote-pulse.funds', globalState.fundLists);
     window.showInformationMessage(`Fund Successfully add.`);
     if (cb && typeof cb === 'function') {
       cb(code);
@@ -136,7 +136,7 @@ export class LeekFundConfig extends BaseConfig {
     updatedFunds = clean(updatedFunds);
     updatedFunds = uniq(updatedFunds);
     globalState.fundLists[index] = updatedFunds as never;
-    this.setConfig('leek-fund.funds', globalState.fundLists);
+    this.setConfig('quote-pulse.funds', globalState.fundLists);
     window.showInformationMessage(`Fund Successfully delete.`);
     if (cb && typeof cb === 'function') {
       cb(code);
@@ -154,7 +154,7 @@ export class LeekFundConfig extends BaseConfig {
     const funds = globalState.fundLists[index] as Array<string>;
     const updatedFunds = [fundCode, ...funds.filter((item) => item !== fundCode)];
     globalState.fundLists[index] = updatedFunds as never;
-    this.setConfig('leek-fund.funds', globalState.fundLists);
+    this.setConfig('quote-pulse.funds', globalState.fundLists);
     window.showInformationMessage(`Fund Successfully set to top.`);
     if (cb && typeof cb === 'function') {
       cb(code);
@@ -164,7 +164,7 @@ export class LeekFundConfig extends BaseConfig {
 
   // Stock Begin
   static updateStockCfg(list: string, cb?: Function) {
-    const cfgKey = 'leek-fund.stocks';
+    const cfgKey = 'quote-pulse.stocks';
     const config = this.getGlobalConfig();
     // 优先使用全局配置值
     const origin = this.getGlobalConfigArray(cfgKey);
@@ -185,7 +185,7 @@ export class LeekFundConfig extends BaseConfig {
   }
 
   static removeStockCfg(code: string, cb?: Function) {
-    this.removeConfig('leek-fund.stocks', code).then(() => {
+    this.removeConfig('quote-pulse.stocks', code).then(() => {
       window.showInformationMessage(`Stock Successfully delete.`);
       if (cb && typeof cb === 'function') {
         cb(code);
@@ -195,7 +195,7 @@ export class LeekFundConfig extends BaseConfig {
 
   static addStockToBarCfg(code: string, cb?: Function) {
     const addStockToBar = () => {
-      let configArr: string[] = this.getConfig('leek-fund.statusBarStock');
+      let configArr: string[] = this.getConfig('quote-pulse.statusBarStock');
       if (configArr.length >= 4) {
         window.showInformationMessage(`StatusBar Exceeding Length.`);
         if (cb && typeof cb === 'function') {
@@ -208,7 +208,7 @@ export class LeekFundConfig extends BaseConfig {
         }
       } else {
         configArr.push(code);
-        this.setConfig('leek-fund.statusBarStock', configArr).then(() => {
+        this.setConfig('quote-pulse.statusBarStock', configArr).then(() => {
           window.showInformationMessage(`Stock Successfully add to statusBar.`);
           if (cb && typeof cb === 'function') {
             cb(code);
@@ -217,8 +217,8 @@ export class LeekFundConfig extends BaseConfig {
       }
     };
 
-    if (this.getConfig('leek-fund.hideStatusBarStock')) {
-      this.setConfig('leek-fund.hideStatusBarStock', false).then(() => {
+    if (this.getConfig('quote-pulse.hideStatusBarStock')) {
+      this.setConfig('quote-pulse.hideStatusBarStock', false).then(() => {
         addStockToBar();
       });
     } else {
@@ -227,12 +227,12 @@ export class LeekFundConfig extends BaseConfig {
   }
 
   static setStockTopCfg(code: string, cb?: Function) {
-    let arr: string[] = this.getConfig('leek-fund.stocks');
+    let arr: string[] = this.getConfig('quote-pulse.stocks');
     // 临时解决3.10.1~3.10.3 pr产生的分组bug
     const stockList = flattenDeep(arr).filter?.((item) => item !== code);
     stockList.unshift(code);
 
-    this.setConfig('leek-fund.stocks', stockList).then(() => {
+    this.setConfig('quote-pulse.stocks', stockList).then(() => {
       window.showInformationMessage(`Stock successfully set to top.`);
       if (cb && typeof cb === 'function') {
         cb(code);
@@ -248,7 +248,7 @@ export class LeekFundConfig extends BaseConfig {
       }
     };
 
-    let configArr: string[] = this.getConfig('leek-fund.stocks');
+    let configArr: string[] = this.getConfig('quote-pulse.stocks');
     const currentIndex = configArr.indexOf(code);
     let previousIndex = currentIndex - 1;
     // 找到前一个同市场的股票
@@ -272,7 +272,7 @@ export class LeekFundConfig extends BaseConfig {
     } else {
       // 交换位置
       configArr[currentIndex] = configArr.splice(previousIndex, 1, configArr[currentIndex])[0];
-      this.setConfig('leek-fund.stocks', configArr).then(() => {
+      this.setConfig('quote-pulse.stocks', configArr).then(() => {
         callback();
       });
     }
@@ -286,7 +286,7 @@ export class LeekFundConfig extends BaseConfig {
       }
     };
 
-    let configArr: string[] = this.getConfig('leek-fund.stocks');
+    let configArr: string[] = this.getConfig('quote-pulse.stocks');
     const currentIndex = configArr.indexOf(code);
     let nextIndex = currentIndex + 1;
     //找到后一个同市场的股票
@@ -310,7 +310,7 @@ export class LeekFundConfig extends BaseConfig {
     } else {
       // 交换位置
       configArr[currentIndex] = configArr.splice(nextIndex, 1, configArr[currentIndex])[0];
-      this.setConfig('leek-fund.stocks', configArr).then(() => {
+      this.setConfig('quote-pulse.stocks', configArr).then(() => {
         callback();
       });
     }
@@ -320,7 +320,7 @@ export class LeekFundConfig extends BaseConfig {
 
   // Binance Begin
   static updateBinanceCfg(codes: string, cb?: Function) {
-    this.updateConfig('leek-fund.binance', codes.split(',')).then(() => {
+    this.updateConfig('quote-pulse.binance', codes.split(',')).then(() => {
       window.showInformationMessage(`Pair Successfully add.`);
       if (cb && typeof cb === 'function') {
         cb(codes);
@@ -328,7 +328,7 @@ export class LeekFundConfig extends BaseConfig {
     });
   }
   static removeBinanceCfg(code: string, cb?: Function) {
-    this.removeConfig('leek-fund.binance', code).then(() => {
+    this.removeConfig('quote-pulse.binance', code).then(() => {
       window.showInformationMessage(`Pair Successfully delete.`);
       if (cb && typeof cb === 'function') {
         cb(code);
@@ -336,9 +336,9 @@ export class LeekFundConfig extends BaseConfig {
     });
   }
   static setBinanceTopCfg(code: string, cb?: Function) {
-    let configArr: string[] = this.getConfig('leek-fund.binance');
+    let configArr: string[] = this.getConfig('quote-pulse.binance');
     configArr = [code, ...configArr.filter((item) => item !== code)];
-    this.setConfig('leek-fund.binance', configArr).then(() => {
+    this.setConfig('quote-pulse.binance', configArr).then(() => {
       window.showInformationMessage(`Pair successfully set to top.`);
       if (cb && typeof cb === 'function') {
         cb(code);
@@ -350,7 +350,7 @@ export class LeekFundConfig extends BaseConfig {
   // StatusBar Begin
   static updateStatusBarStockCfg(codes: Array<string>, cb?: Function) {
     const updateStatusBarStock = () => {
-      this.setConfig('leek-fund.statusBarStock', codes).then(() => {
+      this.setConfig('quote-pulse.statusBarStock', codes).then(() => {
         window.showInformationMessage(`Status Bar Stock Successfully update.`);
         if (cb && typeof cb === 'function') {
           cb(codes);
@@ -359,16 +359,16 @@ export class LeekFundConfig extends BaseConfig {
     };
 
     if (codes.length) {
-      if (this.getConfig('leek-fund.hideStatusBarStock')) {
-        this.setConfig('leek-fund.hideStatusBarStock', false).then(() => {
+      if (this.getConfig('quote-pulse.hideStatusBarStock')) {
+        this.setConfig('quote-pulse.hideStatusBarStock', false).then(() => {
           updateStatusBarStock();
         });
       } else {
         updateStatusBarStock();
       }
     } else {
-      if (!this.getConfig('leek-fund.hideStatusBarStock')) {
-        this.setConfig('leek-fund.hideStatusBarStock', true).then(() => {
+      if (!this.getConfig('quote-pulse.hideStatusBarStock')) {
+        this.setConfig('quote-pulse.hideStatusBarStock', true).then(() => {
           updateStatusBarStock();
         });
       } else {

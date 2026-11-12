@@ -25,7 +25,7 @@ const shared = require('../out/shared/xxjwxcData');
 
 function makeStore(session) {
   const map = new Map();
-  if (session) map.set('leek-fund.ljgxSession', session);
+  if (session) map.set('quote-pulse.ljgxSession', session);
   return {
     get: (key) => map.get(key),
     update: (key, value) => {
@@ -296,7 +296,7 @@ describe('NewsProvider 两级树', () => {
     const children = await provider.getChildren(hot);
     assert.strictEqual(children.length, 1);
     assert.ok(children[0].label.includes('重试'));
-    assert.strictEqual(children[0].command.command, 'leek-fund.refreshFollow');
+    assert.strictEqual(children[0].command.command, 'quote-pulse.refreshFollow');
   });
 });
 

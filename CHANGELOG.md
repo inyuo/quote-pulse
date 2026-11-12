@@ -5,9 +5,11 @@
 ## Unreleased
 
 ### Changes
+- 命名空间统一为 `quote-pulse.*`：44 个命令 id、30 个配置键、菜单/欢迎页/激活事件及模板、文档全部更名，与扩展 id 对齐；view id `leekFundView.*` 暂保留以维持侧栏布局
+- 新增一次性配置迁移：激活时把旧命名空间下有值的用户设置逐项复制到同名新键（仅当新键尚未配置），旧键保留便于回滚；命令 id 不留旧别名，旧键位需重绑
+- 重建 `leek-center` 前端产物，修复其 `setFundAmount` 消息误用旧命令名的问题
 - 迁移到独立仓库 `inyuo/quote-pulse`，发布者由 `inyuo-fork` 改为 `inyuo`
-- 品牌更名为「行情脉冲（QuotePulse）」，扩展 id 改为 `quote-pulse`；命令 id、配置键与 view id 保持 `leek-fund.*` / `leekFundView.*` 不变，老用户配置无需迁移
-- 移除遥测上报与 `amplitude` / `public-ip` 依赖
+- 品牌更名为「行情脉冲（QuotePulse）」，扩展 id 改为 `quote-pulse`；移除遥测上报与 `amplitude` / `public-ip` 依赖
 - 去除「韭菜盒子」相关品牌文案、打赏入口、社区入口与上游图标
 
 ### Removed

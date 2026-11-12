@@ -3,7 +3,7 @@
  *
  * 期货（国内交易所 nf_、海外 hf_）属于独立数据通路，已整体下线：
  * 分类、树节点、行情解析、搜索、配置项、计数都不应再出现。
- * 老用户 leek-fund.stocks 里遗留的期货代码由 LEGACY_FUTURE_RE 静默过滤，
+ * 老用户 quote-pulse.stocks 里遗留的期货代码由 LEGACY_FUTURE_RE 静默过滤，
  * 不能退化成「接口不支持该股票」的报错节点。
  *
  * 纯 Node 运行，不依赖 VS Code API：yarn test:unit

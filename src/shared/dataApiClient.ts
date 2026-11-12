@@ -3,7 +3,7 @@ import axios from 'axios';
 /**
  * 服务端数据接口客户端。
  *
- * 配置 leek-fund.dataApiBaseUrl 后，需登录的掘金请求与东财资金流请求
+ * 配置 quote-pulse.dataApiBaseUrl 后，需登录的掘金请求与东财资金流请求
  * 改由服务端完成（多 sessionId 轮询 + 限速 + 按天快照）；配置为空或服务
  * 不可用时调用方显示空态，插件不再扫码登录或直连兜底。
  *
@@ -39,7 +39,7 @@ function settings(): { baseUrl: string; apiKey: string } {
   try {
     // 延迟 require，便于在无 vscode 运行时的单测中加载本模块
     const vscode = require('vscode');
-    const cfg = vscode.workspace.getConfiguration('leek-fund');
+    const cfg = vscode.workspace.getConfiguration('quote-pulse');
     const rawKey = cfg.get('dataApiKey');
     const baseUrl = normalizeBaseUrl(cfg.get('dataApiBaseUrl'));
     const apiKey = typeof rawKey === 'string' ? rawKey.trim() : '';

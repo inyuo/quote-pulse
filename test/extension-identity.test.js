@@ -1,6 +1,6 @@
 /**
  * 扩展身份约束：品牌名（name / displayName）可以改，但命令 id 与配置键必须
- * 保持 `leek-fund.*` 前缀不动，否则老用户的 settings.json、键位绑定与
+ * 保持 `quote-pulse.*` 前缀不动，否则老用户的 settings.json、键位绑定与
  * webview 里的 executeCommand 都会失效。纯 Node 运行，不依赖 VS Code API。
  */
 const assert = require('assert');
@@ -16,9 +16,9 @@ const EXPECTED_PUBLISHER = 'inyuo';
 const EXPECTED_REPO_URL = 'https://github.com/inyuo/quote-pulse';
 
 // 命令 id 的唯一合法前缀
-const COMMAND_PREFIX = 'leek-fund.';
+const COMMAND_PREFIX = 'quote-pulse.';
 // 配置键前缀白名单：investment-monitor.* 是历史发布期遗留的两条键，同样不可改名
-const CONFIG_KEY_PREFIXES = ['leek-fund.', 'investment-monitor.'];
+const CONFIG_KEY_PREFIXES = ['quote-pulse.', 'investment-monitor.'];
 // 侧边栏 view 的 id 前缀（改名时同样不要动）
 const VIEW_PREFIX = 'leekFundView.';
 
@@ -67,7 +67,7 @@ describe('扩展身份：品牌名与 id 兼容性', () => {
     );
   });
 
-  it('contributes.commands 全部命令 id 仍以 leek-fund. 开头', () => {
+  it('contributes.commands 全部命令 id 仍以 quote-pulse. 开头', () => {
     const ids = commandIds();
     assert.ok(ids.length > 0, 'contributes.commands 不应为空');
     const drifted = ids.filter((id) => !String(id).startsWith(COMMAND_PREFIX));
@@ -80,7 +80,7 @@ describe('扩展身份：品牌名与 id 兼容性', () => {
     );
   });
 
-  it('activationEvents 里的 onCommand 仍引用 leek-fund. 命令', () => {
+  it('activationEvents 里的 onCommand 仍引用 quote-pulse. 命令', () => {
     const onCommands = (pkg.activationEvents || [])
       .filter((e) => String(e).startsWith('onCommand:'))
       .map((e) => String(e).slice('onCommand:'.length));
@@ -94,7 +94,7 @@ describe('扩展身份：品牌名与 id 兼容性', () => {
     );
   });
 
-  it('配置键前缀保持在 leek-fund./investment-monitor. 白名单内', () => {
+  it('配置键前缀保持在 quote-pulse./investment-monitor. 白名单内', () => {
     const keys = configKeys();
     assert.ok(keys.length > 0, 'contributes.configuration.properties 不应为空');
     const drifted = keys.filter(

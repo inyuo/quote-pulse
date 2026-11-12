@@ -102,7 +102,7 @@ function showRemindNotice(info: FundInfo, msg: string) {
   window.showWarningMessage(msg, '删除该股提醒', '关闭所有提醒').then((res) => {
     switch (res) {
       case '关闭所有提醒':
-        commands.executeCommand('leek-fund.toggleRemindSwitch', 0);
+        commands.executeCommand('quote-pulse.toggleRemindSwitch', 0);
         break;
       case '删除该股提醒':
         let newCfg = { ...globalState.stocksRemind };

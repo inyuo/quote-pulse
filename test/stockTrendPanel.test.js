@@ -52,12 +52,12 @@ describe('股票实时走势面板 stockTrend', () => {
     assert.ok(html.includes('h5chart-iframe.html'), '应保留东财 K 线 iframe');
   });
 
-  it('点击按钮：转成 leek-fund.stockFundFlowForStock 命令跳转', () => {
+  it('点击按钮：转成 quote-pulse.stockFundFlowForStock 命令跳转', () => {
     const panel = open('0600519', '贵州茅台', 'sh600519');
     panel.fire({ command: 'openFundFlow', code: 'sh600519' });
 
     const call = vscodeMock.commandCalls.find(
-      (c) => c.name === 'leek-fund.stockFundFlowForStock'
+      (c) => c.name === 'quote-pulse.stockFundFlowForStock'
     );
     assert.ok(call, '应执行资金动态命令');
     assert.deepStrictEqual(call.args[0], { id: 'sh600519' });
@@ -87,7 +87,7 @@ describe('股票实时走势面板 stockTrend', () => {
 
     panel.fire({ command: 'openFundFlow', code: 'sz000977' });
     const calls = vscodeMock.commandCalls.filter(
-      (c) => c.name === 'leek-fund.stockFundFlowForStock'
+      (c) => c.name === 'quote-pulse.stockFundFlowForStock'
     );
     assert.strictEqual(calls.length, 1, '同一面板只应触发一次跳转');
     assert.deepStrictEqual(calls[0].args[0], { id: 'sz000977' });

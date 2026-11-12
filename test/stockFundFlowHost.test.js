@@ -75,11 +75,11 @@ describe('资金动态宿主 stockFundFlow', () => {
     assert.ok(Array.isArray(detail.data.fundTables), 'detail 应携带三块表格字段');
   });
 
-  it('openTrend → 转发 leek-fund.stockItemClick（沪市，参数带 0 前缀与 sh/sz 代码）', () => {
+  it('openTrend → 转发 quote-pulse.stockItemClick（沪市，参数带 0 前缀与 sh/sz 代码）', () => {
     vscodeMock.commandCalls.length = 0;
     panel.fire({ command: 'openTrend', code: 'sh600519', name: '贵州茅台' });
 
-    const call = vscodeMock.commandCalls.find((c) => c.name === 'leek-fund.stockItemClick');
+    const call = vscodeMock.commandCalls.find((c) => c.name === 'quote-pulse.stockItemClick');
     assert.ok(call, '应打开股票实时走势');
     assert.deepStrictEqual(call.args, ['0600519', '贵州茅台', '', 'sh600519']);
   });
@@ -88,7 +88,7 @@ describe('资金动态宿主 stockFundFlow', () => {
     vscodeMock.commandCalls.length = 0;
     panel.fire({ command: 'openTrend', code: 'sz000977', name: '浪潮信息' });
 
-    const call = vscodeMock.commandCalls.find((c) => c.name === 'leek-fund.stockItemClick');
+    const call = vscodeMock.commandCalls.find((c) => c.name === 'quote-pulse.stockItemClick');
     assert.ok(call, '应打开股票实时走势');
     assert.deepStrictEqual(call.args, ['0000977', '浪潮信息', '', 'sz000977']);
   });
@@ -105,7 +105,7 @@ describe('资金动态宿主 stockFundFlow', () => {
     );
   });
 
-  it('addStock → 写入 leek-fund.stocks、刷新 Stock 树并重推 init', async () => {
+  it('addStock → 写入 quote-pulse.stocks、刷新 Stock 树并重推 init', async () => {
     vscodeMock.commandCalls.length = 0;
     const before = panel.webview.pushed.length;
 
@@ -115,7 +115,7 @@ describe('资金动态宿主 stockFundFlow', () => {
     assert.strictEqual(configStub.calls.length, 1, '应调用 updateStockCfg');
     assert.strictEqual(configStub.calls[0].code, 'sh601127');
     assert.ok(
-      vscodeMock.commandCalls.some((c) => c.name === 'leek-fund.refreshStock'),
+      vscodeMock.commandCalls.some((c) => c.name === 'quote-pulse.refreshStock'),
       '应刷新侧边栏 Stock 树'
     );
 

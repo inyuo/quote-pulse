@@ -322,13 +322,13 @@ export const isStockTime = () => {
 
 export function allMarkets(): Array<string> {
   let result: Array<string> = [];
-  const funds: Array<string> = LeekFundConfig.getConfig('leek-fund.funds');
+  const funds: Array<string> = LeekFundConfig.getConfig('quote-pulse.funds');
   if (funds.length > 0) {
     // 针对只配置基金的用户，默认增加A股交易时间
     result.push(StockCategory.A);
   }
 
-  const stocks: Array<string> = LeekFundConfig.getConfig('leek-fund.stocks');
+  const stocks: Array<string> = LeekFundConfig.getConfig('quote-pulse.stocks');
   stocks.forEach((item: string) => {
     let market = StockCategory.NODATA;
     if (/^(sh|sz|bj)/.test(item)) {

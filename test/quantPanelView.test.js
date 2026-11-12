@@ -130,16 +130,16 @@ describe('扫码登录 / 掘金分栏 / 策略选股已彻底下线', () => {
     assert.ok(!pkg.activationEvents.includes('onView:leekFundView.quant'));
 
     const cmds = pkg.contributes.commands.map((c) => c.command);
-    assert.ok(!cmds.includes('leek-fund.quantLogin'), '不应再声明扫码登录命令');
-    assert.ok(!cmds.includes('leek-fund.refreshQuant'), '不应再声明掘金刷新命令');
-    assert.ok(cmds.includes('leek-fund.quantOpen'));
+    assert.ok(!cmds.includes('quote-pulse.quantLogin'), '不应再声明扫码登录命令');
+    assert.ok(!cmds.includes('quote-pulse.refreshQuant'), '不应再声明掘金刷新命令');
+    assert.ok(cmds.includes('quote-pulse.quantOpen'));
     assert.ok(
-      !JSON.stringify(pkg.contributes.menus).includes('leek-fund.refreshQuant'),
+      !JSON.stringify(pkg.contributes.menus).includes('quote-pulse.refreshQuant'),
       '菜单不应再引用已删除命令'
     );
 
     const welcome = pkg.contributes.viewsWelcome.find((v) => v.view === 'leekFundView.settings').contents;
-    assert.ok(welcome.includes('[📊 量化面板](command:leek-fund.quantOpen)'), 'Settings 应有量化面板入口');
+    assert.ok(welcome.includes('[📊 量化面板](command:quote-pulse.quantOpen)'), 'Settings 应有量化面板入口');
     assert.ok(welcome.indexOf('个性定制') < welcome.indexOf('量化面板'), '量化面板应排在个性定制之后');
   });
 
@@ -149,8 +149,8 @@ describe('扫码登录 / 掘金分栏 / 策略选股已彻底下线', () => {
 
   it('dataApiBaseUrl 默认指向数据服务，API Key 仍需用户填写', () => {
     const props = JSON.parse(read('package.json')).contributes.configuration.properties;
-    assert.ok(/^https?:\/\/\S+:\d+$/.test(props['leek-fund.dataApiBaseUrl'].default), '应默认配置服务地址');
-    assert.strictEqual(props['leek-fund.dataApiKey'].default, '', '密钥不能写进仓库');
+    assert.ok(/^https?:\/\/\S+:\d+$/.test(props['quote-pulse.dataApiBaseUrl'].default), '应默认配置服务地址');
+    assert.strictEqual(props['quote-pulse.dataApiKey'].default, '', '密钥不能写进仓库');
   });
 });
 
@@ -422,7 +422,7 @@ describe('量化面板模板 quant.html', () => {
 
   it('服务端失败 → 按原因显示差异化空态与重试入口，且无登录引导', () => {
     const cases = [
-      { reason: 'unconfigured', text: '数据服务未配置', tip: 'leek-fund.dataApiBaseUrl' },
+      { reason: 'unconfigured', text: '数据服务未配置', tip: 'quote-pulse.dataApiBaseUrl' },
       { reason: 'unauthorized', text: 'API Key 无效', tip: 'QP_API_KEY', httpStatus: 401 },
       { reason: 'no_data', text: '暂无近5天碰撞快照', tip: '下一轮抓取' },
       { reason: 'unreachable', text: '数据服务连接失败', tip: '8800 端口' },
@@ -662,11 +662,11 @@ describe('量化面板宿主 quantPanel.ts', () => {
       });
   });
 
-  it('openStock → 转发 leek-fund.stockFundFlowForStock（参数 {id: code}）', () => {
+  it('openStock → 转发 quote-pulse.stockFundFlowForStock（参数 {id: code}）', () => {
     vscodeMock.commandCalls.length = 0;
     panel.fire({ command: 'openStock', code: '000001' });
     assert.strictEqual(vscodeMock.commandCalls.length, 1);
-    assert.strictEqual(vscodeMock.commandCalls[0].name, 'leek-fund.stockFundFlowForStock');
+    assert.strictEqual(vscodeMock.commandCalls[0].name, 'quote-pulse.stockFundFlowForStock');
     assert.deepStrictEqual(vscodeMock.commandCalls[0].args[0], { id: '000001' });
   });
 });

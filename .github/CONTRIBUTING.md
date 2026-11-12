@@ -6,17 +6,19 @@
 
 本项目派生自上游 [LeekHub/leek-fund](https://github.com/LeekHub/leek-fund)，遵循 **BSD-3-Clause** 协议。上游的版权声明与免责声明完整保留在仓库的 `LICENSE` 与源码版权头中，本项目与上游官方无任何隶属关系。
 
-## 兼容性硬约束（改代码前必读）
+## 对外契约（改代码前必读）
 
-为了让已安装老版本的用户升级后**配置不丢失**，以下标识属于对外契约，**任何 PR 都不得修改**：
+现行命名空间为 **`quote-pulse.*`**，与扩展 id `inyuo.quote-pulse` 一致：
 
 | 类型 | 前缀 / 取值 | 说明 |
 | --- | --- | --- |
-| 命令 id | `leek-fund.*` | 用户键位与 `keybindings.json` 依赖它们 |
-| 侧边栏 view id | `leekFundView.*` | 视图容器依赖它们 |
-| 配置键 | `leek-fund.*`、`investment-monitor.*` | 用户 `settings.json` 里已写入这些键 |
+| 命令 id | `quote-pulse.*` | 2026-11-12 统一更名；不保留旧别名，用户自定义键位需重绑 |
+| 侧边栏 view id | `leekFundView.*` | 暂保留，避免用户已保存的侧栏布局失效 |
+| 配置键 | `quote-pulse.*`、`investment-monitor.*` | `investment-monitor.expandAStock` 为历史遗留键，保持兼容 |
 
-这些约束由 `test/extension-identity.test.js` 强制校验，改动会让 CI 直接失败。如果确实需要新增能力，请使用**新的**前缀（如 `quote-pulse.*`）并保持老键可用。
+**配置迁移**：`src/shared/configMigration.ts` 在扩展激活时把旧命名空间下有值的用户设置逐项复制到同名新键（仅当新键尚未配置），旧键保留以便回滚。新增配置键时请同时加入迁移清单。
+
+这些约束由 `test/extension-identity.test.js` 与 `scripts/check-manifest.js` 强制校验，改动会让 CI 直接失败。
 
 ## 环境准备
 
