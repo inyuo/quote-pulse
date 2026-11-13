@@ -141,7 +141,7 @@ async function xxjNewsPost(
       }
     );
     if (!res || res.status >= 400) {
-      console.error('[资讯] xxjwxc HTTP error', path, res && res.status);
+      console.error('[资讯] 量化资讯 HTTP error', path, res && res.status);
       return null;
     }
     const payload = res.data;
@@ -151,7 +151,7 @@ async function xxjNewsPost(
     }
     return payload.data;
   } catch (e) {
-    console.error('[资讯] xxjwxc 请求失败', path, errMsg(e));
+    console.error('[资讯] 量化资讯请求失败', path, errMsg(e));
     return null;
   }
 }

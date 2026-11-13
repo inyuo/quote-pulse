@@ -180,10 +180,10 @@ export class NewsService {
         const pair = await Promise.all([fetchXxjFlash(), fetchXxjNews()]);
         items = buildXxjNewsItems(pair[0], pair[1], limit).map((news) => new NewsTreeItem(news));
       } catch (e) {
-        console.error('[资讯] 拉取 xxjwxc 资讯失败', e);
+        console.error('[资讯] 拉取量化资讯失败', e);
       }
       if (items.length === 0) {
-        console.warn('[资讯] xxjwxc 资讯不可用（未登录态变更或接口失败），降级韭研公社');
+        console.warn('[资讯] 量化资讯不可用（未登录态变更或接口失败），降级韭研公社');
       }
     }
 

@@ -188,7 +188,7 @@ export async function loadIndustryRows(): Promise<IndustryRow[]> {
       ratio: 0,
     }));
   } catch (e) {
-    console.error('[资金动态] xxjwxc 行业资金流失败', errMsg(e));
+    console.error('[资金动态] 量化数据源行业资金流失败', errMsg(e));
     return [];
   }
 }

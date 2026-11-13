@@ -1,7 +1,7 @@
 # 资金动态模块 · 实施进度
 
 > 方案：**后端数据层 + postMessage**（方案二）+ **canvas 自绘图表**
-> 数据源：xxjwxc 为主，东财/新浪为备（`fflow` 实测被反爬拦截，仅 `clist` 可用）
+> 数据源：量化平台 为主，东财/新浪为备（`fflow` 实测被反爬拦截，仅 `clist` 可用）
 > 分支 `dev` · 起始基线 `39a1437`
 
 ## 范围（最终版，一次性交付）
@@ -10,10 +10,10 @@
 
 | 粒度 | 数据 | 来源 |
 |---|---|---|
-| A 每只自选股当日主力净流入 | 逐股列表 | xxjwxc `analy.get_share_main` |
-| B 单股分时资金曲线 | price[] + main[] | xxjwxc `analy.get_share_main`（canvas 双轴） |
-| C 自选股所属板块资金流 | 板块排名 | xxjwxc `shares.search` → `get_hy_time` |
-| D 全行业资金流排名 | 496 板块 | 东财 `clist/get` ←→ xxjwxc `get_hy_time` 互备 |
+| A 每只自选股当日主力净流入 | 逐股列表 | 量化平台 `analy.get_share_main` |
+| B 单股分时资金曲线 | price[] + main[] | 量化平台 `analy.get_share_main`（canvas 双轴） |
+| C 自选股所属板块资金流 | 板块排名 | 量化平台 `shares.search` → `get_hy_time` |
+| D 全行业资金流排名 | 496 板块 | 东财 `clist/get` ←→ 量化平台 `get_hy_time` 互备 |
 
 三处消费：
 
@@ -24,7 +24,7 @@
 ## 进度
 
 - [x] 0. 接口结构验证（`get_hy_time` 有金额 `data:[name,jlr,tm]`；东财 `clist` 稳定、`fflow` 风控后已恢复）
-- [x] 1. 数据层 `src/shared/xxjwxcData.ts` + 单测（先红后绿）
+- [x] 1. 数据层 `src/shared/ 数据层模块` + 单测（先红后绿）
 - [x] 2. 数据层 `src/shared/emMoneyFlow.ts` + 单测（30 passing，新增 30 用例）
 - [x] 3. 接入 AI prompt 附录（`ai-service.ts` + `stock-news-view.ts` 两处，
       串行取数改 `Promise.all` 并发，三组数据各自 `.catch` 降级）
@@ -36,7 +36,7 @@
 - [x] 6. 命令注册 2 条：`quote-pulse.viewStockFundFlow`（命令面板）、
       `quote-pulse.stockFundFlowForStock`（自选股右键，`group3`），
       通过 `check-manifest` 一致性测试
-- [x] 4d. A 粒度备源接入：`xxjwxc 失败 → 东财 fflow 当日值`；
+- [x] 4d. A 粒度备源接入：`量化平台 失败 → 东财 fflow 当日值`；
       删除未接入的新浪逐日源（语义为逐日粒度，与分时的 B 不匹配，
       作第三层降级的收益低于维护成本）
 - [x] 7. 全量验证 `tsc` 0 error / `eslint` 0 error（5 warning 基线）/
@@ -56,12 +56,12 @@
 - 数据层**可单测**（方案一被否的核心原因）
 - 每块数据独立 `try/catch`，失败只让该区块显示「暂无数据」
   （韭研超时静默吞异常 → AI 说「无法抓取」的教训）
-- 韭研/xxjwxc 统一 **30s 超时 + 重试 1 次**
+- 韭研/量化平台 统一 **30s 超时 + 重试 1 次**
 - 失败绝不挂主流程
 
 ## 决策记录
 
-- **不加 `quote-pulse.xxjwxc.enabled` 配置开关**：YAGNI。降级链路已保证接口挂掉时
+- **不加 独立的数据源配置开关**：YAGNI。降级链路已保证接口挂掉时
   区块显示「暂无数据」而非报错，开关只省几次失败请求噪音，不值得膨胀
   `package.json` 配置（已有 43 命令）。
 - **不引入 echarts**：`price[]`/`main[]` 双数组画双轴约 60 行 canvas，
@@ -71,11 +71,11 @@
   而同期 `quote.eastmoney.com` 网页始终 200、`push2` 根路径 404（服务本身活着）。
   推论：正常插件使用频率远低于触发阈值，但仍需重试 + 限流 + 降级三重防护。
   `fetchEastIndustryFlow` 加重试 1 次即为此。
-- **xxjwxc `get_hy_time` 只返回 12 个行业**（50 个时间点），不是全量 496。
+- **量化平台 `get_hy_time` 只返回 12 个行业**（50 个时间点），不是全量 496。
   因此 D 粒度降级时只有「主要行业 12 个」——前端按 `IndustryRow.code` 是否存在
-  标注数据源（东财有 BK 代码 → 全量；xxjwxc 无代码 → 备用源），不让用户误以为是全部。
+  标注数据源（东财有 BK 代码 → 全量；量化平台 无代码 → 备用源），不让用户误以为是全部。
 - **A 粒度备源选东财 fflow、弃新浪逐日**：东财返回「当日主力净流入」单值，
-  与 xxjwxc 分时序列末值语义一致；新浪是逐日粒度（字符串金额需转换、还要判断
+  与 量化平台 分时序列末值语义一致；新浪是逐日粒度（字符串金额需转换、还要判断
   `opendate` 是否当天），作第三层降级的收益低于维护成本。备源只在主源失败时触发，
   此时粒度 B（分时曲线）同样是空的，所以不会出现「列表一个值、点进去另一个值」
   的跨源矛盾。
@@ -135,7 +135,7 @@
 
 > 需求：侧边栏「量价掘金」树视图（登录态/暗盘榜单）+ 双面板
 > （量价分层/北向资金流面板 + 大盘指数 spark 面板）+ 微信扫码登录。
-> 数据源：xxjwxc（`weixin.login` SSE / `get_dark_buy` / `get_share_cjl` / `weixin.re_login`）
+> 数据源：量化平台（`weixin.login` SSE / `get_dark_buy` / `get_share_cjl` / `weixin.re_login`）
 > + 东财 `kamt.rtmin`（北向）+ 腾讯 `hs/index`（大盘），零新依赖（复用 axios）。
 > 分支 `dev` · 提交范围 `78fa4a8..6891e2f`（8 个功能提交，Task 1~7）
 
@@ -239,11 +239,11 @@
 | 全球新闻 `rdkp` | `pages/article/xzw` | `POST /shares.get_xzw {start:'',end:'',tag:''}` |
 | 投资日历 `tzrl` | `pages/article/tzrl` | `POST /shares.get_xzw {start:'',end:'',tag:'1'}`（同接口靠 tag 分流） |
 
-原 `xxjwxcNews.ts` 只接了 `get_hejjw`/`get_xzw` 且一律传 `{}`，投资日历那一类根本没取；四来源均需登录（`user-token`，1018 降级）。行字段以登录后真机为准，归一化层做防御式解析。
+原资讯模块只接了 `get_hejjw`/`get_xzw` 且一律传 `{}`，投资日历那一类根本没取；四来源均需登录（`user-token`，1018 降级）。行字段以登录后真机为准，归一化层做防御式解析。
 
 ### 落点
 
-- `src/explorer/xxjwxcNews.ts`：`NEWS_SOURCES` 元数据（endpoint/body/pageUrl/ttlMs）、`resolveNewsSourceUrl`、带 body 的 `xxjNewsPost`、`fetchXxjSource`（失败返回 `null`、未登录/无数据返回 `[]`）、`buildXxjSourceGroups`。
+- `src/explorer/ 资讯模块`：`NEWS_SOURCES` 元数据（endpoint/body/pageUrl/ttlMs）、`resolveNewsSourceUrl`、带 body 的 `xxjNewsPost`、`fetchXxjSource`（失败返回 `null`、未登录/无数据返回 `[]`）、`buildXxjSourceGroups`。
 - `src/explorer/jygNews.ts`：`JYGNewsItem` 增加可选 `source`。
 - `src/explorer/newsService.ts`：`getNewsGroups` 四源并发 + 按来源分级 TTL（快讯 30s / 新闻·日历 5min）、失败源单独标记、`NewsSourceGroupTreeItem`；旧 `getNewsList` 三层降级链路保留给未登录。
 - `src/explorer/newsProvider.ts`：两级 `getChildren`，失败/空分组给可点击重试的占位节点。
@@ -386,7 +386,7 @@ Stock 视图（`leekFundView.stock`，name = `Stock`）点击个股 → `quote-p
 
 ### 落点（均为可单测的纯函数 + 薄编排）
 
-- `src/explorer/xxjwxcNews.ts`：新增 `fetchXxjNewsGroupsForAi(limitPerGroup, deps)`
+- `src/explorer/ 资讯模块`：新增 `fetchXxjNewsGroupsForAi(limitPerGroup, deps)`
   （未登录直接 `[]` 不发请求，登录复用 `fetchXxjSource`+`buildXxjSourceGroups`）与
   纯函数 `buildXxjNewsAppendix(groups)`（仅保留有条目的分组，`【标签】\n- [时间] 标题 —— 摘要`）。
 - `src/webview/jiuyangongshe-news.ts`：把原内联的韭研新闻拼装抽为纯函数 `buildJygNewsAppendix`。

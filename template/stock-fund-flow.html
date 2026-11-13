@@ -377,7 +377,7 @@
           </section>
 
           <section class="panel">
-            <header>第三方量化分析 <span class="hint">xxjwxc</span></header>
+            <header>第三方量化分析 <span class="hint">量化数据</span></header>
             <div class="body" id="analysisBox">
               <div class="empty">暂无数据</div>
             </div>
@@ -559,7 +559,7 @@
             return;
           }
 
-          // 东财源带 BK 板块代码（全量），xxjwxc 降级源无代码（仅 12 个主要行业）
+          // 东财源带 BK 板块代码（全量），备用数据源降级时无代码（仅 12 个主要行业）
           var full = false;
           for (var c = 0; c < rows.length; c++) {
             if (rows[c].code) full = true;

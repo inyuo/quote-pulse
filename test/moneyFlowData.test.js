@@ -363,7 +363,7 @@ describe('AI prompt 资金附录构造 buildStockMoneyFlowAppendix', () => {
   it('附录标注数据来源与时间，便于模型判断时效', () => {
     const text = xxj.buildStockMoneyFlowAppendix(FLOW, ANALYSIS);
     assert.ok(text.includes('20261019'), '应含数据日期');
-    assert.ok(text.includes('复利备忘录') || text.includes('xxjwxc'), '应标注来源');
+    assert.ok(text.includes('量化数据源'), '应标注来源');
   });
 });
 

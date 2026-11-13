@@ -231,7 +231,7 @@ export function buildStockMoneyFlowAppendix(
   }
 
   if (!parts.length) return '';
-  return `\n\n以下为该股资金与量化数据（来自复利备忘录 xxjwxc）：\n\n${parts.join('\n\n')}`;
+  return `\n\n以下为该股资金与量化数据（来自量化数据源）：\n\n${parts.join('\n\n')}`;
 }
 
 /**
