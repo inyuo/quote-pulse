@@ -830,6 +830,17 @@
             return;
           }
 
+          // 北向资金上游只剩全 0 占位：明确告知「数据没有」，不画无意义的平线
+          if (currentTab === 'north' && data && data.unavailable) {
+            wrap.style.display = 'none';
+            box.style.display = 'inline-flex';
+            box.innerHTML =
+              '<div class="empty-text">北向资金实时净流入数据暂不可用<br>' +
+              '上游已停止披露实时数值，当前仅返回全 0 占位数据。点击重试。</div>';
+            box.className = 'empty retriable';
+            return;
+          }
+
           box.style.display = 'none';
           box.className = 'empty';
           wrap.style.display = 'block';
@@ -1160,7 +1171,8 @@
 
         // 失败占位点击重试（元素不随 innerHTML 重建，启动时绑定一次）
         $('chartEmpty').addEventListener('click', function () {
-          if (cache[currentTab] === null) {
+          var cur = cache[currentTab];
+          if (cur === null || (cur && cur.unavailable)) {
             vscode.postMessage({ command: 'refresh' });
           }
         });

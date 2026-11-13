@@ -511,6 +511,26 @@ describe('量化面板模板 quant.html', () => {
     assert.ok(text.includes('快照'), `摘要应含快照时间：${text}`);
     assert.ok(text.includes('已过期'), `过期快照应提示：${text}`);
   });
+
+  it('北向资金全零占位 → 显示专用说明且可点击重试', () => {
+    const page = loadTemplate('quant.html');
+    page.fire('message', {
+      data: {
+        type: 'init',
+        data: initPayload('north', {
+          north: { times: [], hgtNet: [], szgtNet: [], unavailable: true },
+        }),
+      },
+    });
+    const empty = page.el('chartEmpty');
+    assert.ok(empty.innerHTML.includes('实时净流入'), `应显示专用说明，实际：${empty.innerHTML}`);
+    assert.ok(empty.innerHTML.includes('重试'), '应提示可重试');
+    assert.ok(empty.className.includes('retriable'), '应可点击重试');
+    assert.strictEqual(page.el('chartWrap').style.display, 'none');
+
+    page.el('chartEmpty').listeners.click[0]();
+    assert.ok(page.posted.some((m) => m.command === 'refresh'), '点击应触发重试');
+  });
 });
 
 describe('量化面板宿主 quantPanel.ts', () => {

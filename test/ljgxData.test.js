@@ -105,6 +105,33 @@ describe('北向资金解析 parseNorthFundTrends', () => {
       null
     );
   });
+
+  it('上游只返回全 0 占位 → 标记 unavailable，不再画无意义平线', () => {
+    const out = ljgx.parseNorthFundTrends({
+      data: { s2n: ['9:30,0.00,0.00,0.00', '9:31,0.00,0.00,0.00', '11:29,-,-,-'] },
+    });
+    assert.ok(out && out.unavailable === true, '全 0 应标记为不可用');
+    assert.deepStrictEqual(out.times, []);
+    assert.deepStrictEqual(out.hgtNet, []);
+    assert.deepStrictEqual(out.szgtNet, []);
+  });
+
+  it('fetchNorthFundTrends 全零载荷透传 unavailable', async () => {
+    const out = await ljgx.fetchNorthFundTrends({
+      axios: {
+        get: async () => ({ status: 200, data: { data: { s2n: ['9:30,0.00,0.00,0.00'] } } }),
+      },
+    });
+    assert.ok(out && out.unavailable === true);
+  });
+
+  it('存在非零样本时不得误判为不可用', () => {
+    const out = ljgx.parseNorthFundTrends({
+      data: { s2n: ['9:30,0.00,0.00,0.00', '10:00,1.2,0.8,2.0'] },
+    });
+    assert.ok(!out.unavailable);
+    assert.deepStrictEqual(out.times, ['9:30', '10:00']);
+  });
 });
 
 describe('大盘指数解析 parseIndexSpark', () => {

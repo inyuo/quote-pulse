@@ -140,6 +140,8 @@ export interface NorthFundTrends {
   times: string[];
   hgtNet: number[];
   szgtNet: number[];
+  /** 上游只返回全 0 占位时标记，UI 应显示专用空态而非画平线 */
+  unavailable?: boolean;
 }
 
 /**
@@ -167,6 +169,12 @@ export function parseNorthFundTrends(payload: any): NorthFundTrends | null {
     szgtNet.push(szgt);
   }
   if (!times.length) return null;
+  // 上游已停止披露实时净流入：接口仍返回结构完整但全为 0 的占位样本。
+  // 全零时显式标记不可用，避免画成一条看似「没数据」的平线。
+  const hasValue = hgtNet.some((v) => v !== 0) || szgtNet.some((v) => v !== 0);
+  if (!hasValue) {
+    return { times: [], hgtNet: [], szgtNet: [], unavailable: true };
+  }
   return { times, hgtNet, szgtNet };
 }
 
