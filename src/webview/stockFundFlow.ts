@@ -1,7 +1,12 @@
 import { commands, ViewColumn, workspace } from 'vscode';
 import ReusedWebviewPanel from './ReusedWebviewPanel';
 import { getTemplateFileContent } from '../shared/utils';
-import { loadStockFundRows, loadIndustryRows, loadStockDetail } from '../shared/fundFlowData';
+import {
+  loadStockFundRows,
+  loadIndustryRows,
+  loadStockDetail,
+  loadStockQuick,
+} from '../shared/fundFlowData';
 import { LeekFundConfig } from '../shared/leekConfig';
 
 const VIEW_TYPE = 'quote-pulse.stockFundFlow';
@@ -79,8 +84,29 @@ async function pushInit(panel: any, initialCode?: string): Promise<void> {
   }
 }
 
-/** 推送选中股详情（分时曲线 + 所属板块 + 第三方分析 + 资金三块表格） */
+/** 详情请求序号：连续切换股票时丢弃过期响应，避免旧请求覆盖新选中股 */
+let detailSeq = 0;
+
+/**
+ * 推送选中股详情（分阶段）：
+ * 1. detailQuick —— 名称/现价/涨幅（东财单只 ~0.3s），先让头部出现；
+ * 2. detail      —— 曲线/板块/分析/三块表格全量（xxjwxc 单次 5-6s，服务端
+ *    串行处理约 20s+），慢数据回来后整体覆盖。
+ * 每阶段推送前检查 seq，切换过股票的过期响应直接丢弃。
+ */
 async function pushDetail(panel: any, code: string): Promise<void> {
+  const seq = ++detailSeq;
+
+  const quick = await loadStockQuick(code).catch(() => null);
+  if (seq !== detailSeq) return;
+  if (quick) {
+    try {
+      await panel.webview.postMessage({ type: 'detailQuick', data: quick });
+    } catch (e) {
+      console.error('[资金动态] 推送快速行情失败', errMsg(e));
+    }
+  }
+
   const detail = await loadStockDetail(code).catch((e) => {
     console.error('[资金动态] 取个股详情失败', errMsg(e));
     return {
@@ -94,6 +120,7 @@ async function pushDetail(panel: any, code: string): Promise<void> {
       fundTables: [],
     };
   });
+  if (seq !== detailSeq) return;
 
   try {
     await panel.webview.postMessage({ type: 'detail', data: detail });

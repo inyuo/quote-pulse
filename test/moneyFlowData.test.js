@@ -414,6 +414,7 @@ describe('资金动态多源编排 fundFlowData', () => {
     fetchStockAnalysisGroups: flowModule.fetchStockAnalysisGroups,
     fetchEastIndustryFlow: emModule.fetchEastIndustryFlow,
     fetchEastStockMainFlow: emModule.fetchEastStockMainFlow,
+    fetchEastStockFlowBatch: emModule.fetchEastStockFlowBatch,
     fetchStockNames: tcModule.fetchStockNames,
   };
   afterEach(() => {
@@ -424,11 +425,15 @@ describe('资金动态多源编排 fundFlowData', () => {
     flowModule.fetchStockAnalysisGroups = orig.fetchStockAnalysisGroups;
     emModule.fetchEastIndustryFlow = orig.fetchEastIndustryFlow;
     emModule.fetchEastStockMainFlow = orig.fetchEastStockMainFlow;
+    emModule.fetchEastStockFlowBatch = orig.fetchEastStockFlowBatch;
     tcModule.fetchStockNames = orig.fetchStockNames;
   });
   beforeEach(() => {
     // 名称接口默认放行（避免旧用例打外网），需要断言的用例再覆盖
     tcModule.fetchStockNames = async () => ({});
+    // 默认批量返回空（模拟东财批量不可用），旧用例仍走逐股路径；
+    // 需要断言批量优先的用例再覆盖
+    emModule.fetchEastStockFlowBatch = async () => new Map();
   });
 
   describe('loadStockFundRows（A：逐股当日主力净流入）', () => {
@@ -520,6 +525,69 @@ describe('资金动态多源编排 fundFlowData', () => {
       assert.strictEqual(rows[0].name, '', '取不到名称时应为空串而非 undefined');
       assert.strictEqual(rows[0].mainNet, 7, '资金流数据不受名称失败影响');
     });
+
+    it('东财批量命中时不再逐股请求（消除服务端串行排队瓶颈）', async () => {
+      let perStockCalls = 0;
+      flowModule.fetchStockMainFlow = async () => {
+        perStockCalls += 1;
+        return { tm: 't', price: [1], main: [7] };
+      };
+      emModule.fetchEastStockFlowBatch = async (codes) => {
+        const m = new Map();
+        for (const c of codes) {
+          m.set(c, {
+            code: c,
+            name: c === 'sh600519' ? '贵州茅台' : '平安银行',
+            mainNet: 42,
+            price: 10,
+            percent: 1,
+          });
+        }
+        return m;
+      };
+
+      const rows = await fund.loadStockFundRows(['sh600519', 'sz000001']);
+      assert.strictEqual(perStockCalls, 0, `批量命中时不应逐股请求，实际 ${perStockCalls} 次`);
+      assert.strictEqual(rows.length, 2);
+      assert.strictEqual(rows[0].mainNet, 42);
+      assert.strictEqual(rows[0].name, '贵州茅台', '名称应随批量行情带回');
+      assert.strictEqual(rows[0].source, 'east');
+    });
+
+    it('批量部分缺失只对缺失的逐股兜底', async () => {
+      const perStock = [];
+      flowModule.fetchStockMainFlow = async (code) => {
+        perStock.push(code);
+        return { tm: 't', price: [1], main: [7] };
+      };
+      emModule.fetchEastStockFlowBatch = async (codes) => {
+        const m = new Map();
+        for (const c of codes) {
+          if (c === 'sh600519') {
+            m.set(c, { code: c, name: '贵州茅台', mainNet: 42, price: 10, percent: 1 });
+          }
+        }
+        return m;
+      };
+
+      const rows = await fund.loadStockFundRows(['sh600519', 'sz000001']);
+      assert.deepStrictEqual(perStock, ['sz000001'], '只应兜底批量缺失的 sz000001');
+      assert.strictEqual(rows[0].source, 'east');
+      assert.strictEqual(rows[1].source, 'xxjwxc');
+      assert.strictEqual(rows[1].mainNet, 7);
+    });
+
+    it('批量失败时回退逐股主源（慢但可用）', async () => {
+      emModule.fetchEastStockFlowBatch = async () => {
+        throw new Error('network');
+      };
+      flowModule.fetchStockMainFlow = async () => ({ tm: 't', price: [1], main: [7] });
+
+      const rows = await fund.loadStockFundRows(['sh600519']);
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].mainNet, 7);
+      assert.strictEqual(rows[0].source, 'xxjwxc');
+    });
   });
 
   describe('loadIndustryRows（D：全行业资金流排名）', () => {
@@ -607,6 +675,41 @@ describe('资金动态多源编排 fundFlowData', () => {
       assert.strictEqual(called, false);
       assert.strictEqual(d.code, 'hk00700');
       assert.strictEqual(d.mainFlow, null);
+    });
+  });
+
+  describe('loadStockQuick（详情第一阶段快速头部）', () => {
+    it('返回东财批量中的名称/现价/涨幅', async () => {
+      emModule.fetchEastStockFlowBatch = async () =>
+        new Map([
+          ['sh600519', { code: 'sh600519', name: '贵州茅台', mainNet: 1, price: 1333.1, percent: -0.14 }],
+        ]);
+      const q = await fund.loadStockQuick('sh600519');
+      assert.deepStrictEqual(q, {
+        code: 'sh600519',
+        name: '贵州茅台',
+        price: 1333.1,
+        percent: -0.14,
+      });
+    });
+
+    it('批量未命中/失败返回 null（不影响 detail 全量兜底）', async () => {
+      emModule.fetchEastStockFlowBatch = async () => new Map();
+      assert.strictEqual(await fund.loadStockQuick('sh600519'), null);
+      emModule.fetchEastStockFlowBatch = async () => {
+        throw new Error('x');
+      };
+      assert.strictEqual(await fund.loadStockQuick('sh600519'), null);
+    });
+
+    it('非 A 股代码不发请求直接返回 null', async () => {
+      let called = false;
+      emModule.fetchEastStockFlowBatch = async () => {
+        called = true;
+        return new Map();
+      };
+      assert.strictEqual(await fund.loadStockQuick('hk00700'), null);
+      assert.strictEqual(called, false);
     });
   });
 });
@@ -698,6 +801,66 @@ describe('东财个股当日主力净流入 fetchEastStockMainFlow', () => {
       return { status: 200, data: PAYLOAD };
     };
     assert.strictEqual(await em.fetchEastStockMainFlow('hk00700'), null);
+    assert.strictEqual(called, false, '非法 secid 不应发请求');
+  });
+});
+
+describe('东财批量行情 parseEastStockFlowBatch / fetchEastStockFlowBatch', () => {
+  const PAYLOAD = {
+    data: {
+      diff: [
+        { f12: '600519', f14: '贵州茅台', f62: 516422832.0, f2: 1453.9, f3: 1.3 },
+        { f12: '000001', f14: '万  科Ａ', f62: -514478, f2: 12.3, f3: 1.91 },
+        { f12: '000977', f14: '浪潮信息', f62: '-', f2: 51.33, f3: -5.12 },
+        { f12: '999999', f14: '不在传入列表', f62: 1, f2: 1, f3: 1 },
+        '脏行',
+      ],
+    },
+  };
+
+  it('f12 映射回传入代码，f62 缺失（"-"）的股票不入表', () => {
+    const rows = em.parseEastStockFlowBatch(PAYLOAD, ['sh600519', 'sz000001', 'sz000977']);
+    assert.strictEqual(rows.size, 2);
+    const mt = rows.get('sh600519');
+    assert.strictEqual(mt.mainNet, 516422832.0);
+    assert.strictEqual(mt.price, 1453.9);
+    assert.strictEqual(mt.percent, 1.3);
+    assert.strictEqual(rows.get('sz000001').name, '万 科Ａ', '连续空白应折叠为单空格');
+    assert.strictEqual(rows.has('sz000977'), false, '停牌/缺值应交给逐股兜底');
+    assert.strictEqual(rows.has('sz999999'), false, '不在传入列表的代码不应入表');
+  });
+
+  it('空/异常入参返回空 Map', () => {
+    assert.strictEqual(em.parseEastStockFlowBatch(null, ['sh600519']).size, 0);
+    assert.strictEqual(em.parseEastStockFlowBatch({ data: {} }, ['sh600519']).size, 0);
+    assert.strictEqual(em.parseEastStockFlowBatch(PAYLOAD, []).size, 0);
+    assert.strictEqual(em.parseEastStockFlowBatch(PAYLOAD, ['hk00700']).size, 0);
+  });
+
+  it('fetchEastStockFlowBatch 成功时返回映射', async () => {
+    axios.get = async () => ({ status: 200, data: PAYLOAD });
+    const rows = await em.fetchEastStockFlowBatch(['sh600519', 'sz000001']);
+    assert.strictEqual(rows.size, 2);
+  });
+
+  it('连续失败时重试后仍空则返回空 Map（调用方回退逐股）', async () => {
+    let calls = 0;
+    axios.get = async () => {
+      calls += 1;
+      throw timeoutError();
+    };
+    const rows = await em.fetchEastStockFlowBatch(['sh600519']);
+    assert.strictEqual(rows.size, 0);
+    assert.strictEqual(calls, 3, `应尝试 3 次，实际 ${calls}`);
+  });
+
+  it('非法代码列表不发请求', async () => {
+    let called = false;
+    axios.get = async () => {
+      called = true;
+      return { status: 200, data: PAYLOAD };
+    };
+    assert.strictEqual((await em.fetchEastStockFlowBatch(['hk00700'])).size, 0);
     assert.strictEqual(called, false, '非法 secid 不应发请求');
   });
 });

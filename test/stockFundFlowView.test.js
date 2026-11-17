@@ -100,6 +100,26 @@ describe('资金动态模板 stock-fund-flow.html', () => {
     assert.strictEqual(page.el('fundTables').innerHTML, '', '不显示登录引导或空态占位');
   });
 
+  it('detailQuick 先渲染头部名称/价格，表格区等 detail 才出现', () => {
+    const page = loadTemplate('stock-fund-flow.html');
+    page.fire('message', {
+      data: {
+        type: 'detailQuick',
+        data: { code: 'sz000977', name: '浪潮信息', price: 57.35, percent: 2.87 },
+      },
+    });
+
+    assert.strictEqual(page.el('dName').textContent, '浪潮信息');
+    assert.strictEqual(page.el('dCode').textContent, 'sz000977');
+    assert.strictEqual(page.el('dPrice').textContent, '57.35');
+    assert.strictEqual(page.el('dPct').textContent, '+2.87%');
+    assert.strictEqual(page.el('detailTitle').textContent, '浪潮信息 · 分时资金流');
+    assert.ok(
+      !page.el('fundTables').innerHTML.includes('主力分析'),
+      '三块表格应等 detail 才渲染'
+    );
+  });
+
   it('表格字段转义，不出现 undefined/[object Object]', () => {
     const page = loadTemplate('stock-fund-flow.html');
     page.fire('message', {

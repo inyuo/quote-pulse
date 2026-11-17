@@ -1041,6 +1041,21 @@
               : '';
             autoSelect(externalCode);
             updateAddStockBtn();
+          } else if (msg.type === 'detailQuick') {
+            // 第一阶段：快速头部（东财单只 ~0.3s）；曲线/分析/表格仍保持
+            // “加载中…”，等 detail 全量回来后整体覆盖。
+            // 乱序防护由宿主 seq 保证，webview 消息本身有序。
+            var q = msg.data || {};
+            setStatus('');
+            updateStockName(q.code, q.name);
+            $('detailHead').style.display = 'flex';
+            $('dName').textContent = q.name || q.code || '';
+            $('dCode').textContent = q.code || '';
+            $('dPrice').textContent = q.price ? Number(q.price).toFixed(2) : '—';
+            $('dPrice').className = 'price ' + (q.price ? signClass(q.percent) : 'neutral');
+            $('dPct').textContent = q.price ? fmtPct(q.percent) : '';
+            $('dPct').className = 'price ' + signClass(q.percent);
+            $('detailTitle').textContent = (q.name || q.code || '个股') + ' · 分时资金流';
           } else if (msg.type === 'detail') {
             setStatus('');
             renderDetail(msg.data || {});

@@ -17,7 +17,13 @@ import {
   MainFlowData,
   AnalysisGroup,
 } from './xxjwxcData';
-import { fetchEastIndustryFlow, fetchEastStockMainFlow, toSecid } from './emMoneyFlow';
+import {
+  fetchEastIndustryFlow,
+  fetchEastStockMainFlow,
+  fetchEastStockFlowBatch,
+  EastStockFlowRow,
+  toSecid,
+} from './emMoneyFlow';
 import { fetchStockNames } from './tencentStock';
 import { LjgxFetchDeps } from './ljgxData';
 import { FundTable, fetchStockFundTables } from './stockFundTables';
@@ -97,17 +103,13 @@ export function isAShareCode(code: any): boolean {
  * 粒度 A：逐股取当日主力净流入。
  *
  * - 非 A 股代码直接跳过（不发请求）
- * - 限流并发，避免打爆第三方
+ * - 先东财批量一次取完（~0.3s）：逐股调 xxjwxc 单次 5-6s 且服务端
+ *   单 worker 串行处理，30 只自选股逐股请求首屏要排队数分钟
+ * - 批量没覆盖到的股票（接口失败/停牌）才逐股走主源 + 东财单股兜底，
+ *   限流并发，避免打爆第三方
  * - 单股失败保留该行、mainNet 置 null —— 绝不让一只股票拖垮整个列表
  * - mainNet 取**末元素**：main[] 是分时累计序列，求和会得到天文数字
- * - 主源失败才回退东财当日值：只在 xxjwxc 不可用时才打东财
- *   （东财 API 有按 IP 频率限制，正常情况下不增加请求）
- *
- * 注：备源只在主源失败时生效，此时分时曲线（粒度 B）同样是空的，
- * 因此不会出现"列表一个值、点进去另一个值"的跨源矛盾。
- *
- * 股票名称走腾讯批量行情（一次请求拿全部），与逐股资金流并发；
- * 名称失败只丢展示名，行与资金流数据照常返回。
+ * - 名称随批量行情一并带回；仍缺失的用腾讯批量补，失败只丢展示名
  */
 export async function loadStockFundRows(codes: any): Promise<StockFundRow[]> {
   const list = (Array.isArray(codes) ? codes : [])
@@ -116,46 +118,75 @@ export async function loadStockFundRows(codes: any): Promise<StockFundRow[]> {
 
   if (list.length === 0) return [];
 
-  const pair = await Promise.all([
-    mapLimit(list, STOCK_CONCURRENCY, async (code: string): Promise<StockFundRow> => {
-      try {
-        const flow = await fetchStockMainFlow(code);
-        if (flow && flow.main.length > 0) {
-          return {
-            code,
-            name: '',
-            mainNet: flow.main[flow.main.length - 1],
-            tm: flow.tm,
-            source: 'xxjwxc',
-          };
-        }
-      } catch (e) {
-        console.error('[资金动态] 取个股资金流失败', code, errMsg(e));
-      }
+  const batch = await fetchEastStockFlowBatch(list).catch((e) => {
+    console.error('[资金动态] 东财批量行情失败', errMsg(e));
+    return new Map<string, EastStockFlowRow>();
+  });
 
-      // 主源不可用 → 东财当日主力净流入兜底
-      try {
-        const east = await fetchEastStockMainFlow(code);
-        if (east !== null && east !== undefined && !isNaN(east)) {
-          return { code, name: '', mainNet: east, tm: '', source: 'east' };
-        }
-      } catch (e) {
-        console.error('[资金动态] 东财个股资金流兜底失败', code, errMsg(e));
-      }
+  const missing = list.filter((code) => !batch.has(code));
 
-      return { code, name: '', mainNet: null, tm: '', source: '' };
-    }),
-    fetchStockNames(list).catch((e) => {
-      console.error('[资金动态] 批量取股票名称失败', errMsg(e));
-      return {} as { [code: string]: string };
-    }),
+  /** 逐股兜底：主源 xxjwxc 分时末值，失败回退东财单股当日值 */
+  async function fallbackRow(code: string): Promise<StockFundRow> {
+    try {
+      const flow = await fetchStockMainFlow(code);
+      if (flow && flow.main.length > 0) {
+        return {
+          code,
+          name: '',
+          mainNet: flow.main[flow.main.length - 1],
+          tm: flow.tm,
+          source: 'xxjwxc',
+        };
+      }
+    } catch (e) {
+      console.error('[资金动态] 取个股资金流失败', code, errMsg(e));
+    }
+
+    try {
+      const east = await fetchEastStockMainFlow(code);
+      if (east !== null && east !== undefined && !isNaN(east)) {
+        return { code, name: '', mainNet: east, tm: '', source: 'east' };
+      }
+    } catch (e) {
+      console.error('[资金动态] 东财个股资金流兜底失败', code, errMsg(e));
+    }
+
+    return { code, name: '', mainNet: null, tm: '', source: '' };
+  }
+
+  const [fallback, nameRows] = await Promise.all([
+    mapLimit(missing, STOCK_CONCURRENCY, fallbackRow),
+    (async () => {
+      // 批量源没带回名称的代码，用腾讯批量行情一次补齐
+      const need = list.filter((code) => {
+        const east = batch.get(code);
+        return !east || !east.name;
+      });
+      if (!need.length) return {} as { [code: string]: string };
+      return fetchStockNames(need).catch((e) => {
+        console.error('[资金动态] 批量取股票名称失败', errMsg(e));
+        return {} as { [code: string]: string };
+      });
+    })(),
   ]);
 
-  const rows = pair[0];
-  const names = pair[1] || {};
-  for (const row of rows) {
-    row.name = names[row.code] || '';
-  }
+  const fallbackByCode = new Map(fallback.map((row) => [row.code, row]));
+  const rows: StockFundRow[] = list.map((code) => {
+    const east = batch.get(code);
+    if (east) {
+      return {
+        code,
+        name: east.name || (nameRows && nameRows[code]) || '',
+        mainNet: east.mainNet,
+        tm: '',
+        source: 'east',
+      };
+    }
+    const row = fallbackByCode.get(code);
+    return row
+      ? { ...row, name: row.name || (nameRows && nameRows[code]) || '' }
+      : { code, name: (nameRows && nameRows[code]) || '', mainNet: null, tm: '', source: '' };
+  });
   return rows;
 }
 
@@ -190,6 +221,38 @@ export async function loadIndustryRows(): Promise<IndustryRow[]> {
   } catch (e) {
     console.error('[资金动态] 量化数据源行业资金流失败', errMsg(e));
     return [];
+  }
+}
+
+/** 快速头部信息：先于完整详情推送，让名称/价格秒级出现（东财单只 ~0.3s） */
+export interface StockQuickInfo {
+  code: string;
+  name: string;
+  price: number;
+  percent: number;
+}
+
+/**
+ * 选中股的快速信息（P2 分阶段推送第一阶段）。
+ * 曲线/分析/三块表格依赖 xxjwxc（单次 5-6s），先把名称与现价补出来，
+ * 慢数据随后由 loadStockDetail 完整覆盖。
+ */
+export async function loadStockQuick(code: any): Promise<StockQuickInfo | null> {
+  const safeCode = typeof code === 'string' ? code : '';
+  if (!isAShareCode(safeCode)) return null;
+  try {
+    const rows = await fetchEastStockFlowBatch([safeCode]);
+    const row = rows.get(safeCode);
+    if (!row) return null;
+    return {
+      code: safeCode,
+      name: row.name,
+      price: row.price,
+      percent: row.percent,
+    };
+  } catch (e) {
+    console.error('[资金动态] 快速行情失败', safeCode, errMsg(e));
+    return null;
   }
 }
 

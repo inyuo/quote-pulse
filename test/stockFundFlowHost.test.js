@@ -75,6 +75,64 @@ describe('资金动态宿主 stockFundFlow', () => {
     assert.ok(Array.isArray(detail.data.fundTables), 'detail 应携带三块表格字段');
   });
 
+  it('分阶段推送：detailQuick 先于 detail 到达', async () => {
+    fundStub.setQuickResult({});
+    const before = panel.webview.pushed.length;
+    panel.fire({ command: 'select', code: 'sh600519' });
+    await tick();
+
+    const pushed = panel.webview.pushed.slice(before);
+    const qi = pushed.findIndex((m) => m.type === 'detailQuick');
+    const di = pushed.findIndex((m) => m.type === 'detail');
+    assert.ok(qi >= 0, '应推送 detailQuick');
+    assert.ok(di >= 0, '应推送 detail');
+    assert.ok(qi < di, '快速行情应先于全量详情');
+    assert.strictEqual(pushed[qi].data.code, 'sh600519');
+  });
+
+  it('切换股票后丢弃过期详情（旧响应不得覆盖新选中股）', async () => {
+    const origDetail = fundStub.loadStockDetail;
+    let releaseOld;
+    fundStub.loadStockDetail = (code) =>
+      code === 'sh600519'
+        ? new Promise((resolve) => {
+            releaseOld = () =>
+              resolve({
+                code,
+                name: '旧响应',
+                price: 0,
+                percent: 0,
+                mainFlow: null,
+                analysis: [],
+                sectors: [],
+                fundTables: [],
+              });
+          })
+        : origDetail(code);
+
+    const before = panel.webview.pushed.length;
+    try {
+      panel.fire({ command: 'select', code: 'sh600519' });
+      await tick();
+      panel.fire({ command: 'select', code: 'sz000977' });
+      await tick();
+      releaseOld();
+      await tick();
+
+      const details = panel.webview.pushed
+        .slice(before)
+        .filter((m) => m.type === 'detail');
+      assert.strictEqual(
+        details.find((m) => m.data.code === 'sh600519'),
+        undefined,
+        '被切换丢弃的旧详情不应推送'
+      );
+      assert.ok(details.some((m) => m.data.code === 'sz000977'), '新选中股详情应正常推送');
+    } finally {
+      fundStub.loadStockDetail = origDetail;
+    }
+  });
+
   it('openTrend → 转发 quote-pulse.stockItemClick（沪市，参数带 0 前缀与 sh/sz 代码）', () => {
     vscodeMock.commandCalls.length = 0;
     panel.fire({ command: 'openTrend', code: 'sh600519', name: '贵州茅台' });
